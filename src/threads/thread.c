@@ -357,11 +357,6 @@ thread_set_priority (int new_priority)
   ASSERT(new_priority <= PRI_MAX);
   ASSERT(new_priority >= PRI_MIN);
 
-  if (thread_current ()->priority > new_priority) {
-    printf("%s now lowering priority.", thread_current()->name);
-  }
-
-
   thread_current ()->priority = new_priority;
 }
 
