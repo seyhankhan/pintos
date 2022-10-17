@@ -20,9 +20,24 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+/* struct for storing pointer to sleeping thread with the tick it should wake.
+   for use in sleeping_threads list */
+struct sleeping_thread_list_elem {
+  struct list_elem elem;
+  struct thread * sleeping_thread;
+  int64_t time;
+  struct semaphore sema;
+};
+
+/* list of all sleeping threads each with the tick they should wait
+   sorted in ascending order of ticks the thread should wake */
+static struct list sleeping_threads;
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
+
+static list_less_func thread_list_less;
 
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
@@ -37,6 +52,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  list_init(&sleeping_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -86,14 +103,31 @@ timer_elapsed (int64_t then)
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
+
+static bool thread_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct sleeping_thread_list_elem, elem)->time < 
+         list_entry(b, struct sleeping_thread_list_elem, elem)->time;
+}
+
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  struct sleeping_thread_list_elem thread_elem;
+  thread_elem.time = start + ticks;
+  thread_elem.sleeping_thread = thread_current();
+  sema_init(&thread_elem.sema, 0);
+  /* interrupts disabled as sleeping_threads is shared between interrupt handler and kernel thread */
+  enum intr_level old_level = intr_disable();
+  list_insert_ordered(&sleeping_threads, &thread_elem.elem, thread_list_less, NULL);
+
+  /* interrupts reenabled after list access complete */
+  intr_set_level(old_level);
+
+  sema_down(&thread_elem.sema);  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +206,14 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  /* checks if the first element of sleeping_threads should wake on this tick.
+     if the thread should wake, it is unblocked and this repeats for the next element
+     until a thread does not need to wake */
+  while (!list_empty(&sleeping_threads) && 
+    (ticks >= list_entry(list_front(&sleeping_threads), struct sleeping_thread_list_elem, elem)->time)) {
+    sema_up(&list_entry(list_pop_front(&sleeping_threads), struct sleeping_thread_list_elem, elem)->sema);
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
