@@ -20,7 +20,7 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
-/* struct for storing pointer to sleeping thread with the tick it should wake.
+/* struct for storing a thread's semaphore with the tick it should wake.
    for use in sleeping_threads list */
 struct sleeping_thread_list_elem {
   struct list_elem elem;
