@@ -54,6 +54,10 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
+// Used for list_sort to sort it in decending order
+// Thread with greatest priority on top
+static bool priority_list_greater(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-mlfqs". */
@@ -350,6 +354,14 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  ASSERT(new_priority <= PRI_MAX);
+  ASSERT(new_priority >= PRI_MIN);
+
+  if (thread_current ()->priority > new_priority) {
+    printf("%s now lowering priority.", thread_current()->name);
+  }
+
+
   thread_current ()->priority = new_priority;
 }
 
@@ -497,6 +509,12 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+// Switched < to >
+static bool priority_list_greater(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct thread, elem)->priority > 
+         list_entry(b, struct thread, elem)->priority;
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -507,8 +525,12 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
+  else {
+    // Sorts list to make sure the highets priority thread is always at the front
+    // Not the most efficient solution - but for now passess alarm - priority
+    list_sort(&ready_list, priority_list_greater, NULL);
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
