@@ -24,7 +24,6 @@ static int64_t ticks;
    for use in sleeping_threads list */
 struct sleeping_thread_list_elem {
   struct list_elem elem;
-  struct thread * sleeping_thread;
   int64_t time;
   struct semaphore sema;
 };
@@ -118,7 +117,6 @@ timer_sleep (int64_t ticks)
 
   struct sleeping_thread_list_elem thread_elem;
   thread_elem.time = start + ticks;
-  thread_elem.sleeping_thread = thread_current();
   sema_init(&thread_elem.sema, 0);
   /* interrupts disabled as sleeping_threads is shared between interrupt handler and kernel thread */
   enum intr_level old_level = intr_disable();
