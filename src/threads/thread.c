@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -102,6 +103,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -219,7 +221,11 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  // Checks if the thread that has just been inserted is the thread with highest priority
+  // If so, yield 
+  if (list_entry(list_front(&ready_list), struct thread, elem) == t) {
+    thread_yield();
+  }
   return tid;
 }
 
@@ -256,7 +262,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  // Maintains ordered list
+  list_insert_ordered(&ready_list, &t->elem, priority_list_greater, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -327,7 +334,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_list_greater, NULL);
+    //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -358,6 +366,14 @@ thread_set_priority (int new_priority)
   ASSERT(new_priority >= PRI_MIN);
 
   thread_current ()->priority = new_priority;
+  // TODO: If No longer the highest priority calls yield
+  struct list_elem *highest_priority_elem;
+  if (!list_empty(&ready_list)) {
+    highest_priority_elem = list_front(&ready_list);
+    if (list_entry(highest_priority_elem, struct thread, elem)->priority > thread_current()->priority) {
+      thread_yield();
+    }
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -369,17 +385,23 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice UNUSED) 
 {
-  /* Not yet implemented. */
+  ASSERT(new_nice <= 20);
+  ASSERT(new_nice >= -20);
+
+  thread_current()->nice = new_nice;
+
+  /* TODO: 
+  - Recalculate thread's priority based on the new value
+  - if the running thread no longer has the highest priority yield() */
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -489,6 +511,8 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+  // TODO: Initial thread - nice = 0; other threads inherit from parent thread
+  // TODO: calculate priority
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -521,9 +545,6 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    // Sorts list to make sure the highets priority thread is always at the front
-    // Not the most efficient solution - but for now passess alarm - priority
-    list_sort(&ready_list, priority_list_greater, NULL);
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
   }
 }
