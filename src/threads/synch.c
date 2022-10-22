@@ -178,6 +178,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  list_init(&lock->donations);
   sema_init (&lock->semaphore, 1);
 }
 
@@ -196,8 +197,16 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct list_elem elem;
+  elem->donation = holder->effective_priority;
+  list_push_back(&lock->donations, &elem.elem);
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+
+  if (list_entry(list_front(&lock->donations), struct donation_elem, elem) > lock->holder.effective_priority) {
+    lock->holder.effective_priority = list_entry(list_front(&lock->donations), struct donation_elem, elem)->donation;
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -231,8 +240,11 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  thread_current()->effective_priority = thread_current()->priority;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  list_pop_back(&lock->donations);
 }
 
 /* Returns true if the current thread holds LOCK, false

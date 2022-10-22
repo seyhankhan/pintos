@@ -366,11 +366,12 @@ thread_set_priority (int new_priority)
   ASSERT(new_priority >= PRI_MIN);
 
   thread_current ()->priority = new_priority;
+  thread_current ()->effective_priority = new_priority;
   // TODO: If No longer the highest priority calls yield
   struct list_elem *highest_priority_elem;
   if (!list_empty(&ready_list)) {
     highest_priority_elem = list_front(&ready_list);
-    if (list_entry(highest_priority_elem, struct thread, elem)->priority > thread_current()->priority) {
+    if (list_entry(highest_priority_elem, struct thread, elem)->effective_priority > thread_current()->effective_priority) {
       thread_yield();
     }
   }
@@ -380,7 +381,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current ()->effective_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -506,6 +507,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->effective_priority = priority;
   t->magic = THREAD_MAGIC;
   // Initially effective priority is the same as the given priority
   t->effective_priority = priority;
@@ -532,8 +534,8 @@ alloc_frame (struct thread *t, size_t size)
 
 // Switched < to >
 static bool priority_list_greater(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
-  return list_entry(a, struct thread, elem)->priority > 
-         list_entry(b, struct thread, elem)->priority;
+  return list_entry(a, struct thread, elem)->effective_priority > 
+         list_entry(b, struct thread, elem)->effective_priority;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
