@@ -190,6 +190,11 @@ lock_init (struct lock *lock)
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return list_entry(a, struct donation_elem, elem)->donation < list_entry(b, struct donation_elem, elem)->donation;
+}
+
 void
 lock_acquire (struct lock *lock)
 {
@@ -197,16 +202,26 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct list_elem elem;
-  elem->donation = holder->effective_priority;
+  struct donation_elem elem;
+  elem.donation = thread_current()->effective_priority;
+
+  enum intr_level old_level;
+
+  old_level = intr_disable();
   list_push_back(&lock->donations, &elem.elem);
+  lock->holder->effective_priority = list_entry(list_max(&lock->donations, prio_list_less, NULL), struct donation_elem, elem)->donation;
+
+  intr_set_level(old_level);
 
   sema_down (&lock->semaphore);
+
+  old_level = intr_disable();
+
+  list_remove(&elem.elem);
+
   lock->holder = thread_current ();
 
-  if (list_entry(list_front(&lock->donations), struct donation_elem, elem) > lock->holder.effective_priority) {
-    lock->holder.effective_priority = list_entry(list_front(&lock->donations), struct donation_elem, elem)->donation;
-  }
+  intr_set_level(old_level); 
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -240,11 +255,12 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  enum intr_level old_level = intr_disable();
   thread_current()->effective_priority = thread_current()->priority;
+  intr_set_level(old_level);
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-
-  list_pop_back(&lock->donations);
 }
 
 /* Returns true if the current thread holds LOCK, false

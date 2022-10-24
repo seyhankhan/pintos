@@ -20,8 +20,8 @@ void sema_self_test (void);
 /* Lock. */
 
 struct donation_elem {
-  int donation;
   struct list_elem elem;
+  int donation;
 };
 
 struct lock 
