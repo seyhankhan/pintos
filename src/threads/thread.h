@@ -25,6 +25,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define PRI_NESTING_MAX_DEPTH 8
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -91,7 +93,8 @@ struct thread
     int priority;                       /* Priority. */
     int effective_priority;             /* Effective Priority*/
     struct list_elem allelem;           /* List element for all threads list. */
-
+    struct list donations;              /* List of donating threads*/
+    struct lock *lock_waiting;          /* Lock that thread is waiting on*/
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     // Nice value
@@ -105,6 +108,11 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct thread_elem {
+   struct list_elem elem;
+   struct thread * thread;
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -135,6 +143,7 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+void thread_update_effective_priority(struct thread *t);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

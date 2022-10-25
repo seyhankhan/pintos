@@ -101,6 +101,10 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
+static bool thread_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return list_entry(a, struct thread, elem)->effective_priority < list_entry(b, struct thread, elem)->effective_priority;
+}
+
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
 
@@ -111,13 +115,32 @@ sema_up (struct semaphore *sema)
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
-
+  struct thread *next;
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+    struct list_elem * elem = list_max (&sema->waiters, thread_list_less, NULL);
+    next = (list_entry (elem, struct thread, elem));
+    list_remove(elem);
+    thread_unblock(next);
+  }
+
   sema->value++;
   intr_set_level (old_level);
+
+  //https://edstem.org/us/courses/29392/discussion/1986978
+  if (threads_ready() > 0 && next->effective_priority > thread_get_priority())
+    {
+      // Yielding in the middle of interrupt context could lead to kernel being in an inconsistent state
+      if (intr_context ())
+        {
+          intr_yield_on_return ();
+        }
+      else
+        {
+          thread_yield();
+        }
+    }
+
 }
 
 static void sema_test_helper (void *sema_);
@@ -191,10 +214,6 @@ lock_init (struct lock *lock)
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
 
-static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct donation_elem, elem)->donation < list_entry(b, struct donation_elem, elem)->donation;
-}
-
 void
 lock_acquire (struct lock *lock)
 {
@@ -202,24 +221,37 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct donation_elem elem;
-  elem.donation = thread_current()->effective_priority;
-
+  struct thread_elem elem;
+  elem.thread = thread_current();
+  
   enum intr_level old_level;
 
   old_level = intr_disable();
+  
+  elem.thread->lock_waiting = lock;
   list_push_back(&lock->donations, &elem.elem);
-  lock->holder->effective_priority = list_entry(list_max(&lock->donations, prio_list_less, NULL), struct donation_elem, elem)->donation;
 
+  if (lock->holder != NULL) {
+    list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
+    thread_update_effective_priority(lock->holder);
+  }
   intr_set_level(old_level);
 
   sema_down (&lock->semaphore);
 
   old_level = intr_disable();
 
+  lock->holder = elem.thread;
+  lock->holder->lock_waiting = NULL;
+
   list_remove(&elem.elem);
 
-  lock->holder = thread_current ();
+  //take all elements from lock donation list and put them in holder donation list
+  while (!list_empty(&lock->donations)) {
+    list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
+  }
+  
+  thread_update_effective_priority(elem.thread);
 
   intr_set_level(old_level); 
 }
@@ -256,10 +288,23 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   enum intr_level old_level = intr_disable();
-  thread_current()->effective_priority = thread_current()->priority;
+
+  //take all elements from lock->holder->donations which are from lock, and put them in lock->donations so priorities are preserved
+  struct list_elem * e;
+  struct list_elem * n;
+  e = list_begin(&lock->holder->donations);
+  while (!list_empty(&lock->holder->donations)) {
+    if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
+      n = list_remove(e);
+      list_push_back(&lock->donations, e);
+      e = n;
+    }
+  }
+
+  thread_update_effective_priority(thread_current());
+  lock->holder = NULL;
   intr_set_level(old_level);
 
-  lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
 

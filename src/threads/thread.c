@@ -58,6 +58,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 // Used for list_sort to sort it in decending order
 // Thread with greatest priority on top
 static bool priority_list_greater(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
+static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -223,7 +224,7 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
   // Checks if the thread that has just been inserted is the thread with highest priority
   // If so, yield 
-  if (list_entry(list_front(&ready_list), struct thread, elem) == t) {
+  if (list_entry(list_max(&ready_list, prio_list_less, NULL), struct thread, elem) == t) {
     thread_yield();
   }
   return tid;
@@ -334,7 +335,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered(&ready_list, &cur->elem, priority_list_greater, NULL);
+    list_push_back(&ready_list, &cur->elem);
     //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -358,6 +359,47 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+static bool thread_effective_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct thread_elem, elem)->thread->effective_priority < list_entry(b, struct thread_elem, elem)->thread->effective_priority;
+}
+
+/* Updates effective priority of thread t and all threads recieving donations from t
+   Interrupts must be disabled 
+   Should probably have a max depth*/
+
+static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
+  t->effective_priority = list_entry(list_max(&t->donations, thread_effective_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
+  if (t->effective_priority < t->priority) {
+    t->effective_priority = t->priority;
+  }
+  if (t->lock_waiting != NULL && depth != PRI_NESTING_MAX_DEPTH) {
+    thread_update_effective_priority_depth(t->lock_waiting->holder, depth + 1);
+  }
+}
+
+static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct thread, elem)->effective_priority < list_entry(b, struct thread, elem)->effective_priority;
+}
+
+void thread_update_effective_priority(struct thread *t) {
+  thread_update_effective_priority_depth(t, 0);
+
+  //SWITCH THREADS TO NEW HIGHEST PRIORITY
+  if (threads_ready() > 0 && list_entry(list_max(&ready_list, prio_list_less, NULL), struct thread, elem) != thread_current())
+  {
+    if (intr_context ())
+      {
+        intr_yield_on_return ();
+      }
+    else
+      {
+        thread_yield();
+      }
+  }
+}
+
+
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -365,16 +407,18 @@ thread_set_priority (int new_priority)
   ASSERT(new_priority <= PRI_MAX);
   ASSERT(new_priority >= PRI_MIN);
 
-  thread_current ()->priority = new_priority;
-  thread_current ()->effective_priority = new_priority;
+  struct thread * curr = thread_current();
+  curr->priority = new_priority;
+  //thread_current ()->effective_priority = new_priority;
   // TODO: If No longer the highest priority calls yield
-  struct list_elem *highest_priority_elem;
+  /*struct list_elem *highest_priority_elem;
   if (!list_empty(&ready_list)) {
     highest_priority_elem = list_front(&ready_list);
     if (list_entry(highest_priority_elem, struct thread, elem)->effective_priority > thread_current()->effective_priority) {
       thread_yield();
     }
-  }
+  }*/
+  thread_update_effective_priority(curr);
 }
 
 /* Returns the current thread's priority. */
@@ -506,8 +550,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+  list_init(&t->donations);
+  t->lock_waiting = NULL;
   t->priority = priority;
-  t->effective_priority = priority;
   t->magic = THREAD_MAGIC;
   // Initially effective priority is the same as the given priority
   t->effective_priority = priority;
@@ -549,7 +594,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_max (&ready_list, prio_list_less, NULL), struct thread, elem);
   }
 }
 
