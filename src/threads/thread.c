@@ -385,8 +385,12 @@ static bool prio_list_less(const struct list_elem *a, const struct list_elem *b,
   return list_entry(a, struct thread, elem)->effective_priority < list_entry(b, struct thread, elem)->effective_priority;
 }
 
-void thread_update_effective_priority(struct thread *t) {
+void thread_update_effective_priority_no_yield(struct thread *t) {
   thread_update_effective_priority_depth(t, 0);
+}
+
+void thread_update_effective_priority(struct thread *t) {
+  thread_update_effective_priority_no_yield(t);
 
   //SWITCH THREADS TO NEW HIGHEST PRIORITY
   if (threads_ready() > 0 && list_entry(list_max(&ready_list, prio_list_less, NULL), struct thread, elem) != thread_current())
