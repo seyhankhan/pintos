@@ -368,7 +368,11 @@ static bool thread_effective_prio_list_less(const struct list_elem *a, const str
    Should probably have a max depth*/
 
 static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
-  t->effective_priority = list_entry(list_max(&t->donations, thread_effective_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
+  ASSERT(!intr_context());
+  t->effective_priority = t->priority;
+  if (!list_empty(&t->donations)) {
+    t->effective_priority = list_entry(list_max(&t->donations, thread_effective_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
+  }
   if (t->effective_priority < t->priority) {
     t->effective_priority = t->priority;
   }
@@ -594,7 +598,9 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    return list_entry (list_max (&ready_list, prio_list_less, NULL), struct thread, elem);
+    struct list_elem * e = list_max (&ready_list, prio_list_less, NULL);
+    list_remove(e);
+    return list_entry (e, struct thread, elem);
   }
 }
 

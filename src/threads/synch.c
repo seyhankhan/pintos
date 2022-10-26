@@ -290,14 +290,12 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable();
 
   //take all elements from lock->holder->donations which are from lock, and put them in lock->donations so priorities are preserved
-  struct list_elem * e;
-  struct list_elem * n;
-  e = list_begin(&lock->holder->donations);
-  while (!list_empty(&lock->holder->donations)) {
-    if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
-      n = list_remove(e);
-      list_push_back(&lock->donations, e);
-      e = n;
+  if (!list_empty(&lock->holder->donations)) {
+    for (struct list_elem *e = list_begin(&lock->holder->donations); e != list_end(&lock->holder->donations); e = list_next(e)) {
+      if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
+        list_remove(e);
+        list_push_back(&lock->donations, e);
+      }
     }
   }
 
