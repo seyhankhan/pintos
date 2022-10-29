@@ -245,7 +245,7 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
   // Checks if the thread that has just been inserted is the thread with highest priority
   // If so, yield 
-  if (list_entry(list_max(&ready_list, prio_list_less, NULL), struct thread, elem) == t) {
+  if (t->effective_priority > thread_get_priority()) {
     thread_yield();
   }
   return tid;
@@ -664,10 +664,12 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    return list_entry (list_remove_max (&ready_list, prio_list_less), struct thread, elem);
+    struct list_elem *max_elem = list_remove_max (&ready_list, prio_list_less);
+    return list_entry (max_elem, struct thread, elem);
   }
 }
 

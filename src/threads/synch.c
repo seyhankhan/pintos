@@ -227,14 +227,17 @@ lock_acquire (struct lock *lock)
   enum intr_level old_level;
 
   old_level = intr_disable();
-  
   elem.thread->lock_waiting = lock;
-  list_push_back(&lock->donations, &elem.elem);
 
-  if (lock->holder != NULL) {
-    list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
-    thread_update_effective_priority(lock->holder);
+  if (!thread_mlfqs) {    
+    list_push_back(&lock->donations, &elem.elem);
+
+    if (lock->holder != NULL) {
+      list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
+      thread_update_effective_priority(lock->holder);
+    }
   }
+  
   intr_set_level(old_level);
 
   sema_down (&lock->semaphore);
@@ -244,14 +247,15 @@ lock_acquire (struct lock *lock)
   lock->holder = elem.thread;
   lock->holder->lock_waiting = NULL;
 
-  list_remove(&elem.elem);
-
-  //take all elements from lock donation list and put them in holder donation list
-  while (!list_empty(&lock->donations)) {
-    list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
+  if (!thread_mlfqs) {
+    list_remove(&elem.elem);
+    //take all elements from lock donation list and put them in holder donation list
+    while (!list_empty(&lock->donations)) {
+      list_push_back(&lock->holder->donations, list_pop_front(&lock->donations));
+    }
+    thread_update_effective_priority(elem.thread);
   }
-  
-  thread_update_effective_priority(elem.thread);
+ 
 
   intr_set_level(old_level); 
 }
@@ -289,22 +293,24 @@ lock_release (struct lock *lock)
 
   enum intr_level old_level = intr_disable();
 
-  //take all elements from lock->holder->donations which are from lock, and put them in lock->donations so priorities are preserved
-  size_t size = 0;
-  if (!list_empty(&lock->holder->donations)) {
-    while (list_size(&lock->holder->donations) != size) {
-      size = list_size(&lock->holder->donations);
-      for (struct list_elem* e = list_begin(&lock->holder->donations); e != list_end(&lock->holder->donations); e = list_next(e)) {
-        if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
-          list_remove(e);
-          list_push_back(&lock->donations, e);
-          break;
+  if (!thread_mlfqs) {
+    //take all elements from lock->holder->donations which are from lock, and put them in lock->donations so priorities are preserved
+    size_t size = 0;
+    if (!list_empty(&lock->holder->donations)) {
+      while (list_size(&lock->holder->donations) != size) {
+        size = list_size(&lock->holder->donations);
+        for (struct list_elem* e = list_begin(&lock->holder->donations); e != list_end(&lock->holder->donations); e = list_next(e)) {
+          if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
+            list_remove(e);
+            list_push_back(&lock->donations, e);
+            break;
+          }
         }
       }
     }
+    thread_update_effective_priority_no_yield(thread_current());
   }
 
-  thread_update_effective_priority_no_yield(thread_current());
   lock->holder = NULL;
   intr_set_level(old_level);
 
