@@ -125,10 +125,10 @@ sema_up (struct semaphore *sema)
   }
 
   sema->value++;
-  intr_set_level (old_level);
-
+  
   //https://edstem.org/us/courses/29392/discussion/1986978
-  if (threads_ready() > 0 && next->effective_priority > thread_get_priority())
+  //unsure if this should be called if the thread is still highest effective priority
+  if (threads_ready() > 0)
     {
       // Yielding in the middle of interrupt context could lead to kernel being in an inconsistent state
       if (intr_context ())
@@ -140,7 +140,7 @@ sema_up (struct semaphore *sema)
           thread_yield();
         }
     }
-
+  intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
