@@ -99,6 +99,8 @@ struct thread
     struct list_elem elem;              /* List element. */
     // Nice value
     int nice;
+    int32_t recent_cpu;                 /* Estimate of CPU time the thread has
+                                           used recently. (In FP)*/
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -146,6 +148,10 @@ void thread_foreach (thread_action_func *, void *);
 void thread_update_effective_priority(struct thread *t);
 void thread_update_effective_priority_no_yield(struct thread *t);
 struct list_elem *list_remove_max(struct list *list, list_less_func *less_func);
+// BSD functions
+void calculate_thread_priority(struct thread *t, void *aux UNUSED);
+void calculate_load_avg(void);
+void calculate_recent_cpu(struct thread *t, void *aux UNUSED);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -154,5 +160,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
 
 #endif /* threads/thread.h */
