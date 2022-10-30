@@ -288,19 +288,21 @@ lock_release (struct lock *lock)
 
   if (!thread_mlfqs) {
     //take all elements from lock->holder->donations which are from lock, and put them in lock->donations so priorities are preserved
-    size_t size = 0;
     if (!list_empty(&lock->holder->donations)) {
-      while (list_size(&lock->holder->donations) != size) {
-        size = list_size(&lock->holder->donations);
-        for (struct list_elem* e = list_begin(&lock->holder->donations); e != list_end(&lock->holder->donations); e = list_next(e)) {
-          if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
-            list_remove(e);
-            list_push_back(&lock->donations, e);
-            break;
-          }
+      struct list_elem *e = list_begin(&lock->holder->donations);
+      struct list_elem *n;
+      while (e != list_end(&lock->holder->donations)) {
+        if (list_entry(e, struct thread_elem, elem)->thread->lock_waiting == lock) {
+          n = list_remove(e);
+          list_push_back(&lock->donations, e);
+          e = n;
+        } else {
+          e = list_next(e);
         }
       }
     }
+
+
     thread_update_effective_priority_no_yield(thread_current());
   }
 

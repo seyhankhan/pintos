@@ -128,6 +128,8 @@ static void thread_update_effective_priority_depth(struct thread  *t, int depth)
     thread_update_effective_priority_depth(t->lock_waiting->holder, depth + 1);
 }
 
+
+//Used when the thread should not immediately yield
 void thread_update_effective_priority_no_yield(struct thread *t) {
   thread_update_effective_priority_depth(t, 0);
 }
@@ -135,7 +137,7 @@ void thread_update_effective_priority_no_yield(struct thread *t) {
 void thread_update_effective_priority(struct thread *t) {
   thread_update_effective_priority_no_yield(t);
   int highest_ready_prio = list_entry(list_max(&ready_list, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
-  //SWITCH THREADS TO NEW HIGHEST PRIORITY
+  //switch threads to new highest priority
   if (threads_ready() > 0 &&  highest_ready_prio > thread_current()->effective_priority)
   {
     if (intr_context ())
