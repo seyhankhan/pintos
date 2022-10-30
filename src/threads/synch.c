@@ -101,9 +101,6 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
-static bool thread_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->effective_priority < list_entry(b, struct thread, elem)->effective_priority;
-}
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
@@ -119,9 +116,8 @@ sema_up (struct semaphore *sema)
   next = NULL;
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
-    struct list_elem * elem = list_max (&sema->waiters, thread_list_less, NULL);
+    struct list_elem * elem = list_remove_max (&sema->waiters, thread_prio_list_less);
     next = (list_entry (elem, struct thread, elem));
-    list_remove(elem);
     thread_unblock(next);
   }
 
@@ -332,6 +328,13 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
+/*Comapartor Function for semaphore_elem*/
+
+static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return list_entry(list_max(&list_entry(a, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority < 
+         list_entry(list_max(&list_entry(b, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
+}
+
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -382,11 +385,6 @@ cond_wait (struct condition *cond, struct lock *lock)
 
 
 
-static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(list_max(&list_entry(a, struct semaphore_elem, elem)->semaphore.waiters, thread_list_less, NULL), struct thread, elem)->effective_priority < 
-            list_entry(list_max(&list_entry(b, struct semaphore_elem, elem)->semaphore.waiters, thread_list_less, NULL), struct thread, elem)->effective_priority;
-}
-
 /* If any threads are waiting on COND (protected by LOCK), then
    this function signals one of them to wake up from its wait.
    LOCK must be held before calling this function.
@@ -403,8 +401,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    struct list_elem *e = list_max(&cond->waiters, sema_prio_list_less, NULL);
-    list_remove(e);
+    struct list_elem *e = list_remove_max(&cond->waiters, sema_prio_list_less);
     sema_up (&list_entry (e, struct semaphore_elem, elem)->semaphore);
   }
 }

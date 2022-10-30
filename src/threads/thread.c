@@ -61,9 +61,6 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 #define READY_THREADS_FRACTION FP_DIV_INT(INTEGER_TO_FP(1), 60)
 
 
-// Used for list_sort to sort it in decending order
-static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
-
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-mlfqs". */
@@ -80,6 +77,77 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+/* Helper functions*/
+
+/*Returns the max element in a list based on the comparator function passed
+  And also removes the element from the list. This allows us to push elements into a list at O(1)
+  and retrieving them in O(n) in the worst case. More efficient than constantly sorting the list,
+  and removes the issues with using list_insert_ordered as priorities can change which causes the list 
+  to then no longer being in order*/
+
+struct list_elem *list_remove_max(struct list *list, list_less_func *less_func) {
+  struct list_elem *max;
+  max = list_max (list, less_func , NULL);
+  list_remove(max);
+  return max;
+}
+
+/*Comparator functions that return whether "a" has a lower effective priority than "b"
+  Used in sorting and retrieving the max and min elemenet of a list*/
+
+/*Used for thread_elem struct*/
+
+bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct thread_elem, elem)->thread->effective_priority < 
+         list_entry(b, struct thread_elem, elem)->thread->effective_priority;
+}
+
+/*Used for thread struct*/
+
+bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+  return list_entry(a, struct thread, elem)->effective_priority < 
+         list_entry(b, struct thread, elem)->effective_priority;
+}
+
+/* Updates effective priority of thread t and all threads recieving donations from t
+   Must ensure thread safety
+   Interrupts must be disabled 
+   Should probably have a max depth*/
+
+static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
+  ASSERT(!intr_context());
+  t->effective_priority = t->priority;
+
+  if (!list_empty(&t->donations))
+    t->effective_priority = list_entry(list_max(&t->donations, thread_elem_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
+  
+  if (t->effective_priority < t->priority)
+    t->effective_priority = t->priority;
+
+  if (t->lock_waiting != NULL && depth != PRI_NESTING_MAX_DEPTH)
+    thread_update_effective_priority_depth(t->lock_waiting->holder, depth + 1);
+}
+
+void thread_update_effective_priority_no_yield(struct thread *t) {
+  thread_update_effective_priority_depth(t, 0);
+}
+
+void thread_update_effective_priority(struct thread *t) {
+  thread_update_effective_priority_no_yield(t);
+  int highest_ready_prio = list_entry(list_max(&ready_list, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
+  //SWITCH THREADS TO NEW HIGHEST PRIORITY
+  if (threads_ready() > 0 &&  highest_ready_prio > thread_current()->effective_priority)
+  {
+    if (intr_context ())
+        intr_yield_on_return ();
+    else
+        thread_yield();
+  }
+}
+
+/*End of Helper Functions*/
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -153,14 +221,13 @@ thread_tick (void)
     kernel_ticks++;
 
   if (thread_mlfqs) {
-
     // Every second update load_avg and then recent_cpu
     if (timer_ticks() % TIMER_FREQ == 0) {
       calculate_load_avg();
       thread_foreach(&calculate_recent_cpu, NULL);
     }
 
-    // Every second increment recent_cpu of running thread by 1
+    // Every tick increment recent_cpu of running thread by 1
     if (thread_current () != idle_thread)
       t->recent_cpu = FP_ADD_INT (t->recent_cpu, 1);
 
@@ -245,9 +312,9 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
   // Checks if the thread that has just been inserted is the thread with highest priority
   // If so, yield 
-  if (t->effective_priority > thread_get_priority()) {
+  if (t->effective_priority > thread_get_priority())
     thread_yield();
-  }
+
   return tid;
 }
 
@@ -378,54 +445,6 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-static bool thread_effective_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
-  return list_entry(a, struct thread_elem, elem)->thread->effective_priority < list_entry(b, struct thread_elem, elem)->thread->effective_priority;
-}
-
-/* Updates effective priority of thread t and all threads recieving donations from t
-   Must ensure thread safety
-   Interrupts must be disabled 
-   Should probably have a max depth*/
-
-static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
-  ASSERT(!intr_context());
-  t->effective_priority = t->priority;
-  if (!list_empty(&t->donations)) {
-    t->effective_priority = list_entry(list_max(&t->donations, thread_effective_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
-  }
-  if (t->effective_priority < t->priority) {
-    t->effective_priority = t->priority;
-  }
-  if (t->lock_waiting != NULL && depth != PRI_NESTING_MAX_DEPTH) {
-    thread_update_effective_priority_depth(t->lock_waiting->holder, depth + 1);
-  }
-}
-
-static bool prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
-  return list_entry(a, struct thread, elem)->effective_priority < list_entry(b, struct thread, elem)->effective_priority;
-}
-
-void thread_update_effective_priority_no_yield(struct thread *t) {
-  thread_update_effective_priority_depth(t, 0);
-}
-
-void thread_update_effective_priority(struct thread *t) {
-  thread_update_effective_priority_no_yield(t);
-  int highest_ready_prio = list_entry(list_max(&ready_list, prio_list_less, NULL), struct thread, elem)->effective_priority;
-  //SWITCH THREADS TO NEW HIGHEST PRIORITY
-  if (threads_ready() > 0 &&  highest_ready_prio > thread_current()->effective_priority)
-  {
-    if (intr_context ())
-      {
-        intr_yield_on_return ();
-      }
-    else
-      {
-        thread_yield();
-      }
-  }
-}
-
 
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -460,7 +479,7 @@ thread_set_nice (int new_nice UNUSED)
   if (!list_empty(&ready_list))
   {
     struct thread * next = list_entry (list_max (&ready_list,
-                                       &prio_list_less, NULL),
+                                       &thread_prio_list_less, NULL),
                                        struct thread, elem);
     if(thread_current ()->effective_priority < next->effective_priority)
       thread_yield ();
@@ -492,9 +511,9 @@ thread_get_recent_cpu (void)
   return FP_TO_INTEGER_ROUNDED_TO_NEAREST(FP_MULT_INT(thread_current()->recent_cpu, 100));
 }
 
-// For BSD Scheduler
+/* BSD Scheduler - Calculating functions */
 
-// priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
+/* Formula: priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void calculate_thread_priority(struct thread *t, void *aux UNUSED) {
   int recent_cpu = t->recent_cpu;
   int nice = t->nice;
@@ -504,12 +523,12 @@ void calculate_thread_priority(struct thread *t, void *aux UNUSED) {
                                                     INTEGER_TO_FP(PRI_MAX), 
                                                     FP_DIV_INT(recent_cpu, 4)), 
                                       INTEGER_TO_FP(nice * 2));
-  // Round down to the nearest zero
+  // Round down to the nearest zero - Truncation */
   int new_priority = FP_TO_INTEGER_ROUNDED_TO_ZERO(fp_priority);
   t->effective_priority = new_priority;
 }
 
-// load_avg = (59/60)*load_avg + (1/60)*ready_threads
+/* Formula: load_avg = (59/60)*load_avg + (1/60)*ready_threads */
 void calculate_load_avg() {
   int ready_threads = list_size(&ready_list);
   if (thread_current() != idle_thread) {
@@ -518,11 +537,11 @@ void calculate_load_avg() {
   int32_t curr_load_avg = load_avg;
   int32_t load_avg_term = FP_MULT_FP(LOAD_AVG_FRACTION, curr_load_avg);
   int32_t ready_threads_term = FP_MULT_INT(READY_THREADS_FRACTION, ready_threads);
-
+  /*Left in FP form*/ 
   load_avg = FP_ADD_FP(load_avg_term, ready_threads_term);
 }
 
-// recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice,
+/* Formula: recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice, */
 void calculate_recent_cpu(struct thread *t, void *aux UNUSED) {
   int32_t fp_load_avg = load_avg;
   int32_t two_load_avg = FP_MULT_INT(fp_load_avg, 2);
@@ -623,12 +642,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   if (thread_mlfqs) {
-    // If thread is the first one
+    /* If thread being created is the first one. 
+       It has no parent */
     if (strcmp(t->name, "main") == 0) {
       t->nice = 0;
       t->recent_cpu = 0;
     } else {
-      // Inherit from parent 
+      // Inherit from parent for any other thread
       struct thread *parent = thread_current();
       t->nice = parent->nice;
       t->recent_cpu = parent->recent_cpu;
@@ -665,22 +685,13 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    struct list_elem *max_elem = list_remove_max (&ready_list, prio_list_less);
+    struct list_elem *max_elem = list_remove_max (&ready_list, thread_prio_list_less);
     return list_entry (max_elem, struct thread, elem);
   }
 }
-
-struct list_elem *list_remove_max(struct list *list, list_less_func *less_func) {
-  struct list_elem *max;
-  max = list_max (list, less_func , NULL);
-  list_remove(max);
-  return max;
-}
-
 
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.

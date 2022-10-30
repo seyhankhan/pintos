@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "fixed_point.h"
+#include "fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,14 +90,14 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int priority;                       /* Base Priority. */
     int effective_priority;             /* Effective Priority*/
     struct list_elem allelem;           /* List element for all threads list. */
     struct list donations;              /* List of donating threads*/
     struct lock *lock_waiting;          /* Lock that thread is waiting on*/
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    // Nice value
+    // BSD Values
     int nice;
     int32_t recent_cpu;                 /* Estimate of CPU time the thread has
                                            used recently. (In FP)*/
@@ -145,9 +145,6 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
-void thread_update_effective_priority(struct thread *t);
-void thread_update_effective_priority_no_yield(struct thread *t);
-struct list_elem *list_remove_max(struct list *list, list_less_func *less_func);
 // BSD functions
 void calculate_thread_priority(struct thread *t, void *aux UNUSED);
 void calculate_load_avg(void);
@@ -161,5 +158,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+// Helper Functions
+void thread_update_effective_priority(struct thread *t);
+void thread_update_effective_priority_no_yield(struct thread *t);
+struct list_elem *list_remove_max(struct list *list, list_less_func *less_func);
+bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
+bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
 
 #endif /* threads/thread.h */
