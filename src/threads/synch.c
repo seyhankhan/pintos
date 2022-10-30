@@ -116,6 +116,7 @@ sema_up (struct semaphore *sema)
 
   ASSERT (sema != NULL);
   struct thread *next;
+  next = NULL;
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
     struct list_elem * elem = list_max (&sema->waiters, thread_list_less, NULL);
@@ -127,18 +128,15 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
 
-  //https://edstem.org/us/courses/29392/discussion/1986978
-  if (threads_ready() > 0 && next->effective_priority > thread_get_priority())
+  /* Yielding after unblocking from Synchronisation struct if unblocked thread has
+     Higher effective priority */
+  if (next != NULL && next->effective_priority > thread_get_priority())
     {
       // Yielding in the middle of interrupt context could lead to kernel being in an inconsistent state
       if (intr_context ())
-        {
           intr_yield_on_return ();
-        }
       else
-        {
           thread_yield();
-        }
     }
 
 }
