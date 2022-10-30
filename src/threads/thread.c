@@ -112,8 +112,7 @@ bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b,
 
 /* Updates effective priority of thread t and all threads recieving donations from t
    Must ensure thread safety
-   Interrupts must be disabled 
-   Should probably have a max depth*/
+   Provide the maximum nesting depth*/
 
 static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
   ASSERT(!intr_context());

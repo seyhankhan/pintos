@@ -18,17 +18,11 @@ void sema_up (struct semaphore *);
 void sema_self_test (void);
 
 /* Lock. */
-
-struct donation_elem {
-  struct list_elem elem;
-  int donation;
-};
-
 struct lock 
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
-    struct list donations;
+    struct list donations;      /* Buffer for donations used to ensure priority preservation */
   };
 
 void lock_init (struct lock *);

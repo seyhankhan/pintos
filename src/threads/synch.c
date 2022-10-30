@@ -328,12 +328,8 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
-/*Comapartor Function for semaphore_elem*/
-
-static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(list_max(&list_entry(a, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority < 
-         list_entry(list_max(&list_entry(b, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
-}
+/*Comparator Function for semaphore_elem*/
+static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -401,9 +397,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    struct list_elem *e = list_remove_max(&cond->waiters, sema_prio_list_less);
-    sema_up (&list_entry (e, struct semaphore_elem, elem)->semaphore);
+    sema_up (&list_entry (list_remove_max(&cond->waiters, sema_prio_list_less), struct semaphore_elem, elem)->semaphore);
   }
+}
+
+static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  return list_entry(list_max(&list_entry(a, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority < 
+         list_entry(list_max(&list_entry(b, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
