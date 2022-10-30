@@ -39,8 +39,6 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
-static struct lock priority_lock;
-
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -102,7 +100,6 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  lock_init (&priority_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -386,7 +383,8 @@ static bool thread_effective_prio_list_less(const struct list_elem *a, const str
 }
 
 /* Updates effective priority of thread t and all threads recieving donations from t
-   Must ensure thread safety 
+   Must ensure thread safety
+   Interrupts must be disabled 
    Should probably have a max depth*/
 
 static void thread_update_effective_priority_depth(struct thread  *t, int depth) {
@@ -436,13 +434,10 @@ thread_set_priority (int new_priority)
 {
   ASSERT(new_priority <= PRI_MAX);
   ASSERT(new_priority >= PRI_MIN);
-  lock_acquire(&priority_lock);
 
   struct thread * curr = thread_current();
   curr->priority = new_priority;
   thread_update_effective_priority(curr);
-  
-  lock_release(&priority_lock);
 }
 
 /* Returns the current thread's priority. */
