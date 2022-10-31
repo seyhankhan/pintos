@@ -226,15 +226,15 @@ thread_tick (void)
     kernel_ticks++;
 
   if (thread_mlfqs) {
+    // Every tick increment recent_cpu of running thread by 1
+    if (thread_current () != idle_thread)
+      t->recent_cpu = FP_ADD_INT (t->recent_cpu, 1);
+
     // Every second update load_avg and then recent_cpu
     if (timer_ticks() % TIMER_FREQ == 0) {
       calculate_load_avg();
       thread_foreach(&calculate_recent_cpu, NULL);
     }
-
-    // Every tick increment recent_cpu of running thread by 1
-    if (thread_current () != idle_thread)
-      t->recent_cpu = FP_ADD_INT (t->recent_cpu, 1);
 
     // Recalculate thread priorities every 4 ticks (TIME_SLICE = 4)
     if (timer_ticks () % TIME_SLICE == 0) 
