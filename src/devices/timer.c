@@ -118,7 +118,8 @@ timer_sleep (int64_t ticks)
   struct sleeping_thread_list_elem thread_elem;
   thread_elem.time = start + ticks;
   sema_init(&thread_elem.sema, 0);
-  /* interrupts disabled as sleeping_threads is shared between interrupt handler and kernel thread */
+  /* interrupts disabled as sleeping_threads is shared between
+    interrupt handler and kernel thread */
   enum intr_level old_level = intr_disable();
   list_insert_ordered(&sleeping_threads, &thread_elem.elem, thread_list_less, NULL);
 
