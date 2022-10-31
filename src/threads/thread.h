@@ -97,8 +97,8 @@ struct thread
     struct lock *lock_waiting;          /* Lock that thread is waiting on*/
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    // BSD Values
-    int nice;
+    /* BSD Values*/ 
+    int nice;                           /* Niceness of a thread*/
     int32_t recent_cpu;                 /* Estimate of CPU time the thread has
                                            used recently. (In FP)*/
 

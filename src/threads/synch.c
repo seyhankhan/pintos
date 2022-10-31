@@ -407,13 +407,6 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   }
 }
 
-// static bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-//   return list_entry(list_max(&list_entry(a, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), 
-//          struct thread, elem)->effective_priority < 
-//          list_entry(list_max(&list_entry(b, struct semaphore_elem, elem)->semaphore.waiters, thread_prio_list_less, NULL), 
-//          struct thread, elem)->effective_priority;
-// }
-
 static 
 bool sema_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   return list_entry(a, struct semaphore_elem, elem)->sema_prio < 
