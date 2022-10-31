@@ -111,9 +111,10 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+/* Used to store a thread in a list*/
 struct thread_elem {
-   struct list_elem elem;
-   struct thread *thread;
+   struct list_elem elem; /* list_elem for storing the thread in a list*/
+   struct thread *thread; /* pointer to the thread that is being stored in the list*/
 };
 
 /* If false (default), use round-robin scheduler.
