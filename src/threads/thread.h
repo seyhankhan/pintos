@@ -83,7 +83,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-struct thread
+struct thread\lab2223_autumn\pintos_51\-\tags
   {
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
@@ -111,9 +111,10 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+/* Used to store a thread in a list*/
 struct thread_elem {
-   struct list_elem elem;
-   struct thread *thread;
+   struct list_elem elem; /* list_elem for storing the thread in a list*/
+   struct thread *thread; /* pointer to the thread that is being stored in the list*/
 };
 
 /* If false (default), use round-robin scheduler.
