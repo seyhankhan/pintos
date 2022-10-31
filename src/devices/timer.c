@@ -44,6 +44,9 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+/*wake all threads which need to wake this tick*/
+static void check_wake_threads(struct list *threads);
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -199,6 +202,22 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+/* checks if the first element of sleeping_threads should wake on this tick.
+   if the thread should wake, it is unblocked and this repeats for the next element
+   until a thread does not need to wake */
+
+static void check_wake_threads(struct list *threads) {
+  struct sleeping_thread_list_elem *elem;
+  while (!list_empty(threads)) {
+    elem = list_entry(list_front(threads), struct sleeping_thread_list_elem, elem);
+    if (elem->time > ticks) {
+      break;
+    }
+    list_remove(&elem->elem);
+    sema_up(&elem->sema);
+  }
+}
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -206,13 +225,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
-  /* checks if the first element of sleeping_threads should wake on this tick.
-     if the thread should wake, it is unblocked and this repeats for the next element
-     until a thread does not need to wake */
-  while (!list_empty(&sleeping_threads) && 
-    (ticks >= list_entry(list_front(&sleeping_threads), struct sleeping_thread_list_elem, elem)->time)) {
-    sema_up(&list_entry(list_pop_front(&sleeping_threads), struct sleeping_thread_list_elem, elem)->sema);
-  }
+  check_wake_threads(&sleeping_threads);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
