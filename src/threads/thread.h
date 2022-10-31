@@ -113,7 +113,7 @@ struct thread
 
 struct thread_elem {
    struct list_elem elem;
-   struct thread * thread;
+   struct thread *thread;
 };
 
 /* If false (default), use round-robin scheduler.
@@ -162,7 +162,7 @@ int thread_get_load_avg (void);
 void thread_update_effective_priority(struct thread *t);
 void thread_update_effective_priority_no_yield(struct thread *t);
 struct list_elem *list_remove_max(struct list *list, list_less_func *less_func);
-bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
-bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
+bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */

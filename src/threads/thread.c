@@ -98,14 +98,16 @@ struct list_elem *list_remove_max(struct list *list, list_less_func *less_func) 
 
 /*Used for thread_elem struct*/
 
-bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+bool thread_elem_prio_list_less(const struct list_elem *a, 
+                                const struct list_elem *b, void *aux UNUSED) {
   return list_entry(a, struct thread_elem, elem)->thread->effective_priority < 
          list_entry(b, struct thread_elem, elem)->thread->effective_priority;
 }
 
 /*Used for thread struct*/
 
-bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void * aux UNUSED) {
+bool thread_prio_list_less(const struct list_elem *a, 
+                           const struct list_elem *b, void *aux UNUSED) {
   return list_entry(a, struct thread, elem)->effective_priority < 
          list_entry(b, struct thread, elem)->effective_priority;
 }
@@ -119,7 +121,8 @@ static void thread_update_effective_priority_depth(struct thread  *t, int depth)
   t->effective_priority = t->priority;
 
   if (!list_empty(&t->donations))
-    t->effective_priority = list_entry(list_max(&t->donations, thread_elem_prio_list_less, NULL), struct thread_elem, elem)->thread->effective_priority;
+    t->effective_priority = list_entry(list_max(&t->donations, thread_elem_prio_list_less, NULL),
+                                       struct thread_elem, elem)->thread->effective_priority;
   
   if (t->effective_priority < t->priority)
     t->effective_priority = t->priority;
@@ -136,7 +139,8 @@ void thread_update_effective_priority_no_yield(struct thread *t) {
 
 void thread_update_effective_priority(struct thread *t) {
   thread_update_effective_priority_no_yield(t);
-  int highest_ready_prio = list_entry(list_max(&ready_list, thread_prio_list_less, NULL), struct thread, elem)->effective_priority;
+  int highest_ready_prio = list_entry(list_max(&ready_list, thread_prio_list_less, NULL), 
+                                      struct thread, elem)->effective_priority;
   //switch threads to new highest priority
   if (threads_ready() > 0 &&  highest_ready_prio > thread_current()->effective_priority)
   {
