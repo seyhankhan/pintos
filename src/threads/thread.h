@@ -83,7 +83,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-struct thread\lab2223_autumn\pintos_51\-\tags
+struct thread
   {
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
