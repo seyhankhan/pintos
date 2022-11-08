@@ -46,7 +46,7 @@ process_execute (const char *file_name)
   args = palloc_get_page(0);
 
   //split the full string given in by whitespace
-  //should give an array of strings, stored in args (which is an allocated page of memory)
+  //should give an array of strings (which is an allocated page of memory)
   for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
     args[counter] = token;
     ++counter;
@@ -93,7 +93,11 @@ start_process (void *file_name_)
     thread_exit ();
   }
 
-  //TODO: calculate number of arguments passed in (argc)
+  //calculate number of arguments passed in (argc)
+  int argc = 0;
+  while (file_name[argc] != NULL) {
+    ++argc;
+  }
 
   //TODO: set up argv (array of character pointers listing all arguments)
 
