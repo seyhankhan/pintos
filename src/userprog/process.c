@@ -100,9 +100,11 @@ start_process (void *file_name_)
   }
 
   //TODO: set up argv (array of character pointers listing all arguments)
+  char *argv[argc];
 
   //TODO: round stack pointer down to a multiple of 4 before first push
   //for better performance (word-aligned access)
+  if_.esp -= (unsigned) if_.esp % 4
 
   //TODO: Push arguments in reverse order to the order in args (from 
   //process_execute), so from right to left
