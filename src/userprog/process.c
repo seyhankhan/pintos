@@ -53,7 +53,7 @@ process_execute (const char *file_name)
   }
   args[counter] = NULL;
   //elements are in the same order as they were in initial string
-
+  //all pushing to stack happens in start_process
 
   /* Create a new thread to execute FILE_NAME. */
   struct thread *curr = thread_current();
@@ -89,8 +89,25 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
     thread_exit ();
+  }
+
+  //TODO: calculate number of arguments passed in (argc)
+
+  //TODO: set up argv (array of character pointers listing all arguments)
+
+  //TODO: round stack pointer down to a multiple of 4 before first push
+  //for better performance (word-aligned access)
+
+  //TODO: Push arguments in reverse order to the order in args (from 
+  //process_execute), so from right to left
+
+  //TODO: Push null pointer sentinel onto stack for argv[argc] (end of argv)
+
+  //TODO: Make space for fake return address, and push it (NULL), 
+  //so that stack frame has same structure as any other
+  
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
