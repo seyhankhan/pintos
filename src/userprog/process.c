@@ -69,7 +69,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  struct thread *curr = thread_current();
+  char **file_name = file_name_;
+  curr->process = file_name[0];
   struct intr_frame if_;
   bool success;
 
@@ -78,7 +80,12 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (file_name[0], &if_.eip, &if_.esp);
+
+  //if file currently running, deny write to executable
+  struct file *file = filesys_open(file_name[0]);
+  curr->exec_file = file;
+  file_deny_write(file);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);

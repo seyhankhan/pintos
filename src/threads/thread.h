@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -107,6 +108,8 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore sema_execute;      /* Synchronization in process_execute */
+    char* process;                      /* Name of current process */
+    struct file* exec_file;                  /* Process is using this executable file */
 
 #endif
 
