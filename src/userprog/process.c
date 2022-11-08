@@ -99,20 +99,51 @@ start_process (void *file_name_)
     ++argc;
   }
 
-  //TODO: set up argv (array of character pointers listing all arguments)
+  //set up argv (array of character pointers listing all arguments)
   char *argv[argc];
 
-  //TODO: round stack pointer down to a multiple of 4 before first push
+  //round stack pointer down to a multiple of 4 before first push
   //for better performance (word-aligned access)
-  if_.esp -= (unsigned) if_.esp % 4
+  if_.esp -= (unsigned) if_.esp % 4;
 
-  //TODO: Push arguments in reverse order to the order in args (from 
+  char* sentinel = NULL;
+  //decrement stack pointer by size of sentinel
+  if_.esp -= sizeof(sentinel);
+
+  //push null pointer sentinel onto stack as end of argv
+  *(char *)if_.esp = '\0';
+
+  //Push arguments in reverse order to the order in args (from 
   //process_execute), so from right to left
+  int i = 0;
+  for (i = argc - 1; i >= 0; i--) {
+    //decrement esp by size of string pushed
+    int size_of_string = sizeof(char) * strlen(file_name[i]);
+    if_.esp -= size_of_string;
+    
+    memcpy(if_.esp, file_name[i], size_of_string);
+    argv[i] = if_.esp;
+  }
+  
+  //Push address of argv[0]
+  //1. decrement stack pointer by size of pointer
+  if_.esp -= sizeof(argv[0]);
+  //2. push pointer to base of argv on stack
+  memcpy(if_.esp, &argv[0], sizeof(argv[0]));
 
-  //TODO: Push null pointer sentinel onto stack for argv[argc] (end of argv)
 
-  //TODO: Make space for fake return address, and push it (NULL), 
+  //Push argc
+  //1. decrement stack pointer by size of argc
+  if_.esp =- sizeof(int);
+  //2. push argc to stack
+  memcpy(if_.esp, &argc, sizeof(argc));
+
+  //Make space for fake return address, and push it (NULL), 
   //so that stack frame has same structure as any other
+  //1. decrement stack pointer by size of pointer
+  if_.esp -= sizeof(argv[0]);
+  //2. push fake "return address" (null)
+  memcpy(if_.esp, sentinel, sizeof(int));
   
 
   /* Start the user process by simulating a return from an
