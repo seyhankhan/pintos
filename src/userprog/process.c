@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/palloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -38,8 +39,26 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char *token;
+  char *save_ptr;
+  char **args;
+  int counter = 0;
+  args = palloc_get_page(0);
+
+  //split the full string given in by whitespace
+  //should give an array of strings, stored in args (which is an allocated page of memory)
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+    args[counter] = token;
+    ++counter;
+  }
+  args[counter] = NULL;
+  //elements are in the same order as they were in initial string
+
+
   /* Create a new thread to execute FILE_NAME. */
+  struct thread *curr = thread_current();
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&curr->sema_execute);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
