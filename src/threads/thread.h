@@ -92,10 +92,13 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
+    int exit_code; /*Exit code to be displayed in process_exit()
+                     Should actually be defined in USERPROG TODO: Move to USERPROG
+                     (VSCode doesn't like it)*/ 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    
 #endif
 
     /* Owned by thread.c. */
