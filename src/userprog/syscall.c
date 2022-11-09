@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "lib/kernel/stdio.h"
 #include "userprog/syscall.h"
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -13,6 +13,7 @@
 #include "userprog/pagedir.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
+#include "lib/kernel/console.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -29,12 +30,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   switch (system_call_number) {
     case SYS_HALT:
-    halt();
+      halt();
     break;
-
-  
-
-
   }
 
   //printf ("system call!\n");
@@ -46,14 +43,15 @@ void halt(void) {
 }
 
 void exit (int status) {
-  return;
+  thread_current()->exit_code = status;
+  thread_exit();
 }
 
 pid_t exec (const char *file) {
   return 0;
 }
 
-int wait (pid_t) {
+int wait (pid_t  pid) {
   return 0;
 }
 
@@ -94,7 +92,20 @@ int read (int fd, void *buffer, unsigned length) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-  return 0;
+  // If no bytes have been written return default of 0
+  int ret = 0;
+
+  if (fd == STDOUT_FILENO) {
+    // Writing to the console
+    // returns number of bytes written
+    /* TODO: Keep in mind edge case where number of bytes written
+    is less than size because some were not able to be written. 
+    */
+    putbuf(buffer, length);
+    ret = length;
+  } 
+  // TODO: Writing to an actual file
+  return ret;
 }
 
 void seek (int fd, unsigned position) {
