@@ -16,6 +16,9 @@
 #include "lib/kernel/console.h"
 
 static void syscall_handler (struct intr_frame *);
+void read_args(void* esp, int num_args, void **args);
+
+
 
 void
 syscall_init (void) 
@@ -28,9 +31,19 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   int system_call_number = *(int*)(f->esp);
 
+  // array to store arguements passed into the system call
+  // passed to relevant function too
+  void* args[3];
+
   switch (system_call_number) {
     case SYS_HALT:
       halt();
+    break;
+
+    case SYS_EXIT:
+      read_args(f->esp, 1, args);
+      f->eax = exec(*(char**)args[0]);
+      thread_yield();
     break;
   }
 
@@ -48,7 +61,31 @@ void exit (int status) {
 }
 
 pid_t exec (const char *file) {
-  return 0;
+  //check if pointer to file passed in is valid
+  if ((file) || (!is_user_vaddr(file))) {
+    exit(-1);
+  }
+  if (!pagedir_get_page(thread_current()->pagedir, file)) {
+    free(file);
+    exit(-1);
+  }
+
+  char *arg;
+  char *save_ptr;
+
+  int filename_length = strlen(file);
+  char filename_copy[filename_length];
+  strlcpy(filename_copy, file, filename_length);
+  arg = strtok_r(filename_copy, " ", &save_ptr);
+
+  pid_t pid = -1;
+
+  if (filesys_open(arg)) {
+    // implementation of process_execute in argument passing branch, not here.
+    // need to merge changes
+    pid = process_execute(file);
+  }
+  return pid;
 }
 
 int wait (pid_t  pid) {
@@ -75,6 +112,20 @@ bool create (const char *file, unsigned initial_size) {
   return filesys_create(file, initial_size);
 }
 
+// reads num_args arguments from esp, stores in args
+void read_args(void* esp, int num_args, void **args) {
+  int i = 0;
+  void *sp = esp;
+  for (; i < num_args; i++) {
+    sp += 4;
+    if (!sp || !is_user_vaddr(sp)) {
+      exit(-1);
+    }
+    args[i] = sp;
+  }
+}
+
+/*
 bool remove (const char *file) {
   return 0;
 }
@@ -101,6 +152,7 @@ int write (int fd, const void *buffer, unsigned length) {
     /* TODO: Keep in mind edge case where number of bytes written
     is less than size because some were not able to be written. 
     */
+   /*
     putbuf(buffer, length);
     ret = length;
   } 
@@ -119,3 +171,4 @@ unsigned tell (int fd) {
 void close (int fd) {
   return;
 }
+*/
