@@ -17,6 +17,7 @@
 
 static void syscall_handler (struct intr_frame *);
 void read_args(void* esp, int num_args, void **args);
+void check_fp_valid(void *file);
 
 
 
@@ -61,14 +62,7 @@ void exit (int status) {
 }
 
 pid_t exec (const char *file) {
-  //check if pointer to file passed in is valid
-  if ((file) || (!is_user_vaddr(file))) {
-    exit(-1);
-  }
-  if (!pagedir_get_page(thread_current()->pagedir, file)) {
-    free(file);
-    exit(-1);
-  }
+  check_fp_valid(file);
 
   char *arg;
   char *save_ptr;
@@ -94,14 +88,7 @@ int wait (pid_t  pid) {
 
 bool create (const char *file, unsigned initial_size) {
 
-  //check if pointer to file passed in is valid
-  if ((file) || (!is_user_vaddr(file))) {
-    exit(-1);
-  }
-  if (!pagedir_get_page(thread_current()->pagedir, file)) {
-    free(file);
-    exit(-1);
-  }
+  check_fp_valid(file);
 
   //check if file has no name
   if (!strcmp(file, "")) {
@@ -172,3 +159,14 @@ void close (int fd) {
   return;
 }
 */
+
+void check_fp_valid(void *file) {
+  //check if pointer to file passed in is valid
+  if ((file) || (!is_user_vaddr(file))) {
+    exit(-1);
+  }
+  if (!pagedir_get_page(thread_current()->pagedir, file)) {
+    free(file);
+    exit(-1);
+  }
+}
