@@ -30,6 +30,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy, *mod_fn;
+  char *file_name_only, *save_ptr;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -39,33 +40,26 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  char *token;
-  char *save_ptr;
-
-  // Create a modifiable file name so that we can run strtok_r while
-  // Passing the full command to start_process
+  /* Create a modifiable file name so that we can run strtok_r while
+     Passing the full command to start_process */
   mod_fn = palloc_get_page (0);
   if (mod_fn == NULL)
     return TID_ERROR;
   strlcpy (mod_fn, file_name, PGSIZE);
 
-
-  token = strtok_r (mod_fn, " ", &save_ptr);
-
-  
-  //elements are in the same order as they were in initial string
-  //all pushing to stack happens in start_process
-
+  // Extract Filename and pass it as the thread name
+  file_name_only = strtok_r (mod_fn, " ", &save_ptr);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
-  printf("Created Thread: %s\n", token);
-  // Sema down the thread we just created
-  sema_down(&get_thread_by_tid(tid)->sema_execute);
+  tid = thread_create (file_name_only, PRI_DEFAULT, start_process, fn_copy);
+  palloc_free_page(mod_fn);
 
+  // If thread wasn't created successfully free fn_copy
+  // TODO: Find out where it's supposed to be freed
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-    palloc_free_page(mod_fn);
   }
+  // Sema down on the thread that was just created
+  sema_down(&get_thread_by_tid(tid)->sema_execute);
 
   return tid;
 }
@@ -155,8 +149,6 @@ start_process (void *file_name_)
     // Push pointers to arguments in reverse order
     i = 0;
     for (i = counter - 1; i >= 0; i--) {
-      
-      printf("i= %d, %p, unsigned: %u\n", i, ptr_arr[i], *(char *)ptr_arr[i]);
       if_.esp -= sizeof(ptr_arr[i]);
       memcpy(if_.esp, ptr_arr[i], sizeof(ptr_arr[i]));
       printf("Stack pointer: %p , val: %p unsigned: %u\n", if_.esp, ptr_arr[i], *(char *)if_.esp);
@@ -185,15 +177,12 @@ start_process (void *file_name_)
     // //2. push fake "return address" (null)
     if_.esp = (((void**) if_.esp) - 1);
     *((void**)(if_.esp)) = 0;
-    printf("Stack pointer: %p Null pointer sentinel %i\n", if_.esp, *(int*)if_.esp);
+    printf("Stack pointer: %p Fake Return Address %i\n", if_.esp, *(int*)if_.esp);
 
   //if file currently running, deny write to executable
-  printf("About to deny file write\n");
   struct file *file = filesys_open(file_name);
   curr->exec_file = file;
-  printf("Set Executable\n");
   file_deny_write(file);
-  printf("Denied File Write\n");
 
   // Free up memory
   palloc_free_page(args);
