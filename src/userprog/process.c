@@ -21,6 +21,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
+
+#define NULL_BYTE_SIZE 1;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -73,10 +76,8 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-  char *token;
-  char *save_ptr;
-  char **args;
-  int counter = 0;
+  char *token, *save_ptr, **argv;
+  int argc = 0;
 
   printf("Starting Process...\n");
 
@@ -86,113 +87,36 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  // split the full string given in by whitespace
-  // should give an array of strings (which is an allocated page of memory)
-  
-  // TODO: Free memory
+  /*Splits commandline arguments into an array of strings*/
   // Do a check if mem allocation was successful
-  args = palloc_get_page(0);
-
+  argv = palloc_get_page(0);
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-    args[counter] = token;
-    ++counter;
+    argv[argc] = token;
+    ++argc;
   }
-
-  args[counter] = (char *) 0;
-  // Example with command "args-single onearg"
-  // args[0] = args-single
-  // args[1] = onearg
-  // args[2] = 0
+  argv[argc] = (char *) 0;
   
-  printf("About to load file: %s \n", args[0]);
-  curr->process = args[0];
-  success = load (args[0], &if_.eip, &if_.esp);
+  printf("About to load file: %s \n", argv[0]);
+  success = load (argv[0], &if_.eip, &if_.esp);
 
 
   if(success){
-    sema_up (&curr->sema_execute);
     printf("Success!\n");
-    // Number of arguments = counter
-    printf("Argc: %d\n", counter);
+    printf("Argc: %d\n", argc);
     printf("Stack pointer: %p\n", if_.esp);
-    #define NULL_BYTE_SIZE 1;
-
-    // Push Arguments to the stack frame - order doesn't matter for now 
-    // as they will be referenced by pointers
-    int i = 0;
-    void *ptr_arr[counter];
-
-    while (args[i] != NULL) {
-      size_t token_length = strlen (args[i]) + NULL_BYTE_SIZE;
-      // Decrement stackpointer to fit length of string + null byte
-      if_.esp = (void *) (((char*) if_.esp) - token_length);
-      // Note: strlcpy automatically ends token with null byte so no need to append
-      strlcpy ((char*)if_.esp, args[i], token_length);
-      ptr_arr[i] = if_.esp;
-      // Sanity Check
-      printf("Stack pointer: %p , %s\n", if_.esp, (char*)if_.esp);
-      i++;
-    }
-
-    // round stack pointer down to a multiple of 4 before pushing pointers
-    // for better performance (word-aligned access)
-    if_.esp -= (unsigned) if_.esp % 4;  
-    printf("Stack pointer: %p , Word Align\n", if_.esp);
-    // args[argc (num of arguments)]
-    char* sentinel = args[counter];
-    // decrement stack pointer by size of sentinel
-    if_.esp = (void *) (((char*) if_.esp) - sizeof(sentinel)); 
-    // push null pointer sentinel onto stack
-    *(char *)if_.esp = 0;
-    printf("Stack pointer: %p , Null Pointer sentinel\n", if_.esp);
-
-    // Push pointers to arguments in reverse order
-    i = 0;
-    for (i = counter - 1; i >= 0; i--) {
-      if_.esp -= sizeof(ptr_arr[i]);
-      memcpy(if_.esp, ptr_arr[i], sizeof(ptr_arr[i]));
-      printf("Stack pointer: %p , val: %p unsigned: %u\n", if_.esp, ptr_arr[i], *(char *)if_.esp);
-    }
-  
-    //Push address of argv[0]
-    // Stack Pointer currently pointing towards argv[0]
-    void *addr_argv = if_.esp;
-    //1. decrement stack pointer by size of pointer
-    if_.esp -= sizeof(addr_argv );
-    //2. push pointer to base of argv on stack
-    memcpy(if_.esp, addr_argv , sizeof(addr_argv));
-    printf("Stack pointer: %p , val: %p unsigned: %u\n", if_.esp, addr_argv, *(char *)if_.esp);
-
-    //Push argc
-    //1. decrement stack pointer by size of argc
-    if_.esp -= sizeof(int);
-    //2. push argc to stack
-    memcpy(if_.esp, &counter, sizeof(counter));
-    printf("Stack pointer: %p argc: %i\n", if_.esp, *(int*)if_.esp);
-
-    //Make space for fake return address, and push it (NULL), 
-    //so that stack frame has same structure as any other
-    //1. decrement stack pointer by size of pointer
-    // if_.esp -= sizeof(fake_ret_addr);
-    // //2. push fake "return address" (null)
-    if_.esp = (((void**) if_.esp) - 1);
-    *((void**)(if_.esp)) = 0;
-    printf("Stack pointer: %p Fake Return Address %i\n", if_.esp, *(int*)if_.esp);
-
-  //if file currently running, deny write to executable
-  struct file *file = filesys_open(file_name);
-  curr->exec_file = file;
-  file_deny_write(file);
-
-  // Free up memory
-  palloc_free_page(args);
+    pass_args_and_setup_stack(argv, argc, &if_);
+    // If file currently running, deny write to executable
+    struct file *file = filesys_open(file_name);
+    curr->exec_file = file;
+    file_deny_write(file);
+    printf("Denied writing\n");
+    sema_up (&curr->sema_execute);  
 
   } else {
     curr->exit_code = -1;
     sema_up (&curr->sema_execute); 
     thread_exit ();
   }
-
   
 
   /* If load failed, quit. */
@@ -208,6 +132,71 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
+
+static void
+pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
+  /* Push Arguments to the stack frame - order doesn't matter for now 
+     as they will be referenced by pointers*/
+  void *ptr_arr[argc];
+  for (int i = 0; i < argc; i++) {
+    // Need to keep in mind the null byte at the end of the string
+    size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
+    // Decrement stackpointer to fit length of string + null byte
+    if_->esp = (void *) (((char*) if_->esp) - token_length);
+    // Note: strlcpy automatically ends token with null byte so no need to append
+    strlcpy ((char*)if_->esp, argv[i], token_length);
+    // Store the pointer of the argument that was just pushed on to the stack
+    ptr_arr[i] = if_->esp;
+    // TODO: Remove Debug Print statement so tests pass
+    printf("Stack pointer: %p %s\n", if_->esp, (char*)if_->esp);
+  }
+
+  /* Round stack pointer down to a multiple of 4 before pushing pointers
+      for better performance (word-aligned access)*/
+  if_->esp -= (unsigned) if_->esp % 4;  
+  printf("Stack pointer: %p Word Align\n", if_->esp);
+  // decrement stack pointer by size of sentinel
+  if_->esp = (((void**) if_->esp) - 1);
+  // push null pointer sentinel onto stack
+  *((void**)(if_->esp)) = NULL;
+  printf("Stack pointer: %p Null Pointer sentinel, %p\n", if_->esp, *((void**)(if_->esp)));
+
+  // Push pointers to arguments in reverse order
+  for (int i = argc - 1; i >= 0; i--) {
+    if_->esp = (((void**) if_->esp) - 1);
+    memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
+    printf("Stack pointer: %p val: %p\n", if_->esp, *((void**) if_->esp));
+  }
+
+  // Push address of argv[0]
+  // Stack Pointer currently pointing towards argv[0]
+  void *addr_argv = if_->esp;
+  //1. decrement stack pointer by size of pointer
+  if_->esp = (((void**) if_->esp) - 1);
+  //2. push pointer to base of argv on stack
+  memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
+  printf("Stack pointer: %p val: %p\n", ((void**) if_->esp), *((void**) if_->esp));
+
+  /*Push argc
+    1. decrement stack pointer by size of argc
+    2. push argc to stack */
+  if_->esp -= sizeof(argc);
+  memcpy(if_->esp, &argc, sizeof(argc));
+  printf("Stack pointer: %p argc: %i\n", if_->esp, *(int*)if_->esp);
+
+  /*Make space for fake return address, and push it (NULL), 
+    so that stack frame has same structure as any other
+    1. decrement stack pointer to the next address
+    2. push fake "return address" (null)*/
+  if_->esp = (((void**) if_->esp) - 1);
+  // memcpy doesn't work here
+  *((void**)(if_->esp)) = NULL;
+  printf("Stack pointer: %p Fake Return Address %i\n", if_->esp, *(int*)if_->esp);
+
+  // Free up memory
+  palloc_free_page(argv);
+}
+
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
  * returns -1.  
@@ -221,7 +210,7 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   printf("Process Wait\n");
-  while (true) {}
+  // while (true) {}
   
   return -1;
 }

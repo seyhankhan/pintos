@@ -109,8 +109,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore sema_execute;      /* Synchronization in process_execute */
-    char* process;                      /* Name of current process */
-    struct file* exec_file;                  /* Process is using this executable file */
+    struct file* exec_file;             /* Process is using this executable file */
     int exit_code;
 #endif
 
