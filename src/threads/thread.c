@@ -151,6 +151,20 @@ void thread_update_effective_priority(struct thread *t) {
   }
 }
 
+/* USERPROG Function, given the tid returns the thread with that tid*/
+struct thread *
+get_thread_by_tid (tid_t tid)
+{
+  struct list_elem *elem;
+  elem = list_begin (&all_list);
+  while (elem != list_end (&all_list)) {
+    struct thread *t = list_entry (elem, struct thread, allelem);
+    if (t->tid == tid)
+      return t;
+    elem = list_next (elem);
+  }
+  return NULL;
+}
 /*End of Helper Functions*/
 
 
@@ -645,6 +659,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->lock_waiting = NULL;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  
+  #ifdef USERPROG
+  t->exit_code = 0;
+  sema_init(&t->sema_execute, 0);
+  #endif
 
   if (thread_mlfqs) {
     /* If thread being created is the first one. 

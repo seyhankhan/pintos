@@ -8,6 +8,7 @@
 #include "synch.h"
 #include "filesys/file.h"
 
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -110,7 +111,7 @@ struct thread
     struct semaphore sema_execute;      /* Synchronization in process_execute */
     char* process;                      /* Name of current process */
     struct file* exec_file;                  /* Process is using this executable file */
-
+    int exit_code;
 #endif
 
     /* Owned by thread.c. */
@@ -171,5 +172,6 @@ void thread_update_effective_priority_no_yield(struct thread *t);
 struct list_elem *list_remove_max(struct list *list, list_less_func *less_func);
 bool thread_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool thread_elem_prio_list_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+struct thread *get_thread_by_tid (tid_t tid);
 
 #endif /* threads/thread.h */
