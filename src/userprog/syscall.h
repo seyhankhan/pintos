@@ -19,4 +19,9 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
+void try_acquiring_filesys(void);
+void try_releasing_filesys(void);
+void read_args(void* esp, int num_args, void **args);
+void check_fp_valid(void* file);
+
 #endif /* userprog/syscall.h */

@@ -14,17 +14,24 @@
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
 #include "lib/kernel/console.h"
+#include "threads/synch.h"
 
 static void syscall_handler (struct intr_frame *);
 void read_args(void* esp, int num_args, void **args);
+void try_acquiring_filesys(void);
+void try_releasing_filesys(void);
+
+//should we make argument to this function void* or const char *?
 void check_fp_valid(void *file);
 
+struct lock lock_filesys;
 
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&lock_filesys);
 }
 
 static void
@@ -39,13 +46,21 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (system_call_number) {
     case SYS_HALT:
       halt();
-    break;
+      break;
 
     case SYS_EXIT:
       read_args(f->esp, 1, args);
       f->eax = exec(*(char**)args[0]);
       thread_yield();
-    break;
+      break;
+
+    case SYS_REMOVE:
+      read_args(f->esp, 1, args);
+      try_acquiring_filesys();
+      f->eax = remove(*(char**)args[0]);
+      try_releasing_filesys();
+      break;
+
   }
 
   //printf ("system call!\n");
@@ -82,9 +97,11 @@ pid_t exec (const char *file) {
   return pid;
 }
 
+/*
 int wait (pid_t  pid) {
   return 0;
 }
+*/
 
 bool create (const char *file, unsigned initial_size) {
 
@@ -112,11 +129,19 @@ void read_args(void* esp, int num_args, void **args) {
   }
 }
 
-/*
+
 bool remove (const char *file) {
-  return 0;
+  check_fp_valid(file);
+
+  // check if filename is empty, in which case can't remove
+  if (!strcmp(file, "")) {
+    return false;
+  }
+  bool deleted_file = filesys_remove(file);
+  return deleted_file;
 }
 
+/*
 int open (const char *file) {
   return 0;  
 }
@@ -160,7 +185,9 @@ void close (int fd) {
 }
 */
 
-void check_fp_valid(void *file) {
+
+//should we make argument to this function void* or const char *?
+void check_fp_valid(void* file) {
   //check if pointer to file passed in is valid
   if ((file) || (!is_user_vaddr(file))) {
     exit(-1);
@@ -170,3 +197,16 @@ void check_fp_valid(void *file) {
     exit(-1);
   }
 }
+
+void try_acquiring_filesys() {
+  if (lock_filesys.holder != thread_current()) {
+    lock_acquire(&lock_filesys);
+  }
+}
+
+void try_releasing_filesys() {
+  if (lock_filesys.holder != thread_current()) {
+    lock_release(&lock_filesys);
+  }
+}
+
