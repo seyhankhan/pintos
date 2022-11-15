@@ -47,17 +47,22 @@ void halt(void) {
 
 void exit (int status) {
   struct thread *cur = thread_current();
-  cur->exit_status->exit = status;
+  cur->exit_status->exit_code = status;
+  cur->exit_status->exited = true;
+  dec_ref_count(cur->exit_status);
   thread_exit();
-  return;
 }
 
 pid_t exec (const char *file) {
-  return 0;
+  pid_t pid = process_execute(file);
+  if (pid == TID_ERROR) {
+    return TID_ERROR;
+  }
+  return pid;
 }
 
-int wait (pid_t) {
-  return 0;
+int wait (pid_t pid) {
+  return process_wait(pid);
 }
 
 bool create (const char *file, unsigned initial_size) {

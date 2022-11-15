@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -97,6 +98,13 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  dec_ref_count(cur->exit_status);
+
+  for (struct list_elem *e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    dec_ref_count(list_entry(e, struct process_exit_status, elem));
+    list_remove(e);
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
