@@ -95,17 +95,20 @@ process_wait (tid_t child_tid UNUSED)
   struct thread *cur = thread_current();
   int exit_code;
   struct list_elem *e;
-  struct process_exit_status *status;
+  struct process_exit_status *status = NULL;
   for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
     status = list_entry(e, struct process_exit_status, elem);
     if (status->child_pid == child_tid) {
       break;
     }
   }
-  if (e == list_end(&cur->children_status)) {
+  if (status == NULL) {
     return -1;
   }
-  while (!status->exited) {}
+
+  sema_down(&cur->exit_status->sema);
+  
+  //while (!status->exited) {}
   exit_code = status->exit_code;
   
   /*A process should only be able to wait on another once*/
@@ -121,10 +124,13 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  
   dec_ref_count(cur->exit_status);
 
+  struct process_exit_status *status;
   for (struct list_elem *e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
-    dec_ref_count(list_entry(e, struct process_exit_status, elem));
+    status = list_entry(e, struct process_exit_status, elem);
+    dec_ref_count(status);
     list_remove(e);
   }
 
@@ -145,6 +151,17 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 }
+
+void dec_ref_count(struct process_exit_status *exit_status) {
+  lock_acquire(&exit_status->lock);
+  exit_status->ref_count--;
+  if (exit_status->ref_count == 0) {
+    free(exit_status);
+  } else {
+    lock_release(&exit_status->lock);
+  }
+}
+
 
 /* Sets up the CPU for running user code in the current
    thread.

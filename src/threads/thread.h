@@ -81,19 +81,6 @@ typedef int tid_t;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 
-//created when a process creates a child. Only deallocated when both the parent and child terminate
-struct process_exit_status {
-  //exit code, 
-  int exit_code;
-  int ref_count; //keeps track of parent and child being alive to determine when to allocate
-  int child_pid;
-  bool exited;
-  //int parent_pid maybe neccesary
-  struct list_elem elem; //for parent threads list of process
-
-  //add a semaphore/lock to ensure thread safety when changing this data?
-};
-
 struct thread
   {
     /* Owned by thread.c. */
@@ -153,7 +140,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-void dec_ref_count(struct process_exit_status *exit_status);
 
 #endif /* threads/thread.h */

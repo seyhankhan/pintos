@@ -47,9 +47,11 @@ void halt(void) {
 
 void exit (int status) {
   struct thread *cur = thread_current();
+  lock_acquire(&cur->exit_status->lock);
   cur->exit_status->exit_code = status;
   cur->exit_status->exited = true;
-  dec_ref_count(cur->exit_status);
+  lock_release(&cur->exit_status->lock);
+  sema_up(&cur->exit_status->sema);
   thread_exit();
 }
 

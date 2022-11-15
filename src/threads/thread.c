@@ -213,10 +213,10 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  intr_set_level (old_level);
-
   t->exit_status = malloc(sizeof(struct process_exit_status));
   process_exit_status_init(t->exit_status, t->tid);
+
+  intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -229,14 +229,9 @@ static void process_exit_status_init(struct process_exit_status *status, int pid
   status->exit_code = -1;
   status->exited = false;
   status->child_pid = pid;
+  sema_init(&status->sema, 0);
+  lock_init(&status->lock);
   list_push_back(&thread_current()->children_status, &status->elem);
-}
-
-void dec_ref_count(struct process_exit_status *exit_status) {
-  exit_status->ref_count--;
-  if (exit_status->ref_count == 0) {
-    free(exit_status);
-  }
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
