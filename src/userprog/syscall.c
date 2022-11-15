@@ -33,23 +33,56 @@ syscall_handler (struct intr_frame *f UNUSED)
   // array to store arguements passed into the system call
   // passed to relevant function too
   // void* args[3];
+  // hex_dump((uintptr_t) f->esp, f->esp, PHYS_BASE - f->esp, true);
+  int *esp = f->esp;
 
+  esp++;
+
+  int arg1 = *esp;
+  int arg2 = *(esp + 1);
+  int arg3 = *(esp + 2);
+  
   switch (system_call_number) {
     case SYS_HALT:
       halt();
     break;
     case SYS_WRITE:
-      printf("Called Write\n");
+      // printf("Called Write\n");
+      f->eax =write(arg1, (void * ) arg2, arg3);
     break;
+    case SYS_EXIT:
+      thread_exit();
+    break;
+
   }
 
-  printf ("system call!\n");
-  thread_exit ();
+  // printf ("system call!\n");
+  // thread_exit ();
 }
 
 void halt(void) {
   shutdown_power_off();
 }
+
+int write (int fd, const void *buffer, unsigned length) {
+  // If no bytes have been written return default of 0
+  int ret = 0;
+
+  if (fd == STDOUT_FILENO) {
+    // Writing to the console
+    // returns number of bytes written
+    /* TODO: Keep in mind edge case where number of bytes written
+    is less than size because some were not able to be written. 
+    */
+    putbuf(buffer, length);
+    ret = length;
+  } 
+  // TODO: Writing to an actual file
+  return ret;
+}
+
+//wait(pid) return process_wait(pid);
+
 
 // pid_t exec (const char *file) {
 //   check_fp_valid(file);

@@ -79,8 +79,6 @@ start_process (void *file_name_)
   char *token, *save_ptr, **argv;
   int argc = 0;
 
-  printf("Starting Process...\n");
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -95,21 +93,17 @@ start_process (void *file_name_)
     ++argc;
   }
   argv[argc] = (char *) 0;
-  
-  printf("About to load file: %s \n", argv[0]);
+
   success = load (argv[0], &if_.eip, &if_.esp);
 
 
   if(success){
-    printf("Success!\n");
-    printf("Argc: %d\n", argc);
-    printf("Stack pointer: %p\n", if_.esp);
     pass_args_and_setup_stack(argv, argc, &if_);
     // If file currently running, deny write to executable
+    // Lock file system and release lock
     struct file *file = filesys_open(file_name);
     curr->exec_file = file;
     file_deny_write(file);
-    printf("Denied writing\n");
     sema_up (&curr->sema_execute);  
 
   } else {
@@ -138,7 +132,7 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
   /* Push Arguments to the stack frame - order doesn't matter for now 
      as they will be referenced by pointers*/
   void *ptr_arr[argc];
-  for (int i = 0; i < argc; i++) {
+  for (int i = argc - 1; i >= 0; i--) {
     // Need to keep in mind the null byte at the end of the string
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
     // Decrement stackpointer to fit length of string + null byte
@@ -148,24 +142,24 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
     // Store the pointer of the argument that was just pushed on to the stack
     ptr_arr[i] = if_->esp;
     // TODO: Remove Debug Print statement so tests pass
-    printf("Stack pointer: %p %s\n", if_->esp, (char*)if_->esp);
+    // printf("Stack pointer: %p %s\n", if_->esp, (char*)if_->esp);
   }
 
   /* Round stack pointer down to a multiple of 4 before pushing pointers
       for better performance (word-aligned access)*/
   if_->esp -= (unsigned) if_->esp % 4;  
-  printf("Stack pointer: %p Word Align\n", if_->esp);
+  // printf("Stack pointer: %p Word Align\n", if_->esp);
   // decrement stack pointer by size of sentinel
   if_->esp = (((void**) if_->esp) - 1);
   // push null pointer sentinel onto stack
   *((void**)(if_->esp)) = NULL;
-  printf("Stack pointer: %p Null Pointer sentinel, %p\n", if_->esp, *((void**)(if_->esp)));
+  // printf("Stack pointer: %p Null Pointer sentinel, %p\n", if_->esp, *((void**)(if_->esp)));
 
   // Push pointers to arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     if_->esp = (((void**) if_->esp) - 1);
     memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
-    printf("Stack pointer: %p val: %p\n", if_->esp, *((void**) if_->esp));
+    // printf("Stack pointer: %p val: %p\n", if_->esp, *((void**) if_->esp));
   }
 
   // Push address of argv[0]
@@ -175,14 +169,14 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
   if_->esp = (((void**) if_->esp) - 1);
   //2. push pointer to base of argv on stack
   memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
-  printf("Stack pointer: %p val: %p\n", ((void**) if_->esp), *((void**) if_->esp));
+  // printf("Stack pointer: %p val: %p\n", ((void**) if_->esp), *((void**) if_->esp));
 
   /*Push argc
     1. decrement stack pointer by size of argc
     2. push argc to stack */
   if_->esp -= sizeof(argc);
   memcpy(if_->esp, &argc, sizeof(argc));
-  printf("Stack pointer: %p argc: %i\n", if_->esp, *(int*)if_->esp);
+  // printf("Stack pointer: %p argc: %i\n", if_->esp, *(int*)if_->esp);
 
   /*Make space for fake return address, and push it (NULL), 
     so that stack frame has same structure as any other
@@ -191,8 +185,9 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
   if_->esp = (((void**) if_->esp) - 1);
   // memcpy doesn't work here
   *((void**)(if_->esp)) = NULL;
-  printf("Stack pointer: %p Fake Return Address %i\n", if_->esp, *(int*)if_->esp);
+  // printf("Stack pointer: %p Fake Return Address %i\n", if_->esp, *(int*)if_->esp);
 
+  // hex_dump((uintptr_t) if_->esp, if_->esp, PHYS_BASE - if_->esp, true);
   // Free up memory
   palloc_free_page(argv);
 }
@@ -209,9 +204,13 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  printf("Process Wait\n");
   // while (true) {}
-  
+  // get current thread
+  // thread holds a list of children
+  // find relevant child in that list
+  // if equal to child thread struct
+  // Return error if child thread is Null or if waited (can't wait twice)is true,
+
   return -1;
 }
 
