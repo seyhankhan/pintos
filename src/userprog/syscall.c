@@ -14,6 +14,7 @@
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
 #include "lib/kernel/console.h"
+#include "threads/synch.h"
 
 static void syscall_handler (struct intr_frame *);
 void read_args(void* esp, int num_args, void **args);
@@ -30,6 +31,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&lock_filesys);
 }
 
 static void
@@ -212,5 +214,3 @@ void try_releasing_filesys() {
     lock_release(&lock_filesys);
   }
 }
-
-
