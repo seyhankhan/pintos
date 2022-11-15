@@ -17,9 +17,13 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/palloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
+
+#define NULL_BYTE_SIZE 1;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -28,7 +32,8 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *mod_fn;
+  char *file_name_only, *save_ptr;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,10 +43,27 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Create a modifiable file name so that we can run strtok_r while
+     Passing the full command to start_process */
+  mod_fn = palloc_get_page (0);
+  if (mod_fn == NULL)
+    return TID_ERROR;
+  strlcpy (mod_fn, file_name, PGSIZE);
+
+  // Extract Filename and pass it as the thread name
+  file_name_only = strtok_r (mod_fn, " ", &save_ptr);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (file_name_only, PRI_DEFAULT, start_process, fn_copy);
+  palloc_free_page(mod_fn);
+
+  // If thread wasn't created successfully free fn_copy
+  // TODO: Find out where it's supposed to be freed
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
+  }
+  // Sema down on the thread that was just created
+  sema_down(&get_thread_by_tid(tid)->sema_execute);
+
   return tid;
 }
 
@@ -50,21 +72,49 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  struct thread *curr = thread_current();
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  char *token, *save_ptr, **argv;
+  int argc = 0;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  /*Splits commandline arguments into an array of strings*/
+  // Do a check if mem allocation was successful
+  argv = palloc_get_page(0);
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+    argv[argc] = token;
+    ++argc;
+  }
+  argv[argc] = (char *) 0;
+
+  success = load (argv[0], &if_.eip, &if_.esp);
+
+
+  if(success){
+    pass_args_and_setup_stack(argv, argc, &if_);
+    // If file currently running, deny write to executable
+    // Lock file system and release lock
+    struct file *file = filesys_open(file_name);
+    curr->exec_file = file;
+    file_deny_write(file);
+    sema_up (&curr->sema_execute);  
+
+  } else {
+    curr->exit_code = -1;
+    sema_up (&curr->sema_execute); 
+    thread_exit ();
+  }
+  
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  palloc_free_page (file_name);  
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -74,6 +124,72 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+
+static void
+pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
+  /* Push Arguments to the stack frame - order doesn't matter for now 
+     as they will be referenced by pointers*/
+  void *ptr_arr[argc];
+  for (int i = argc - 1; i >= 0; i--) {
+    // Need to keep in mind the null byte at the end of the string
+    size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
+    // Decrement stackpointer to fit length of string + null byte
+    if_->esp = (void *) (((char*) if_->esp) - token_length);
+    // Note: strlcpy automatically ends token with null byte so no need to append
+    strlcpy ((char*)if_->esp, argv[i], token_length);
+    // Store the pointer of the argument that was just pushed on to the stack
+    ptr_arr[i] = if_->esp;
+    // TODO: Remove Debug Print statement so tests pass
+    // printf("Stack pointer: %p %s\n", if_->esp, (char*)if_->esp);
+  }
+
+  /* Round stack pointer down to a multiple of 4 before pushing pointers
+      for better performance (word-aligned access)*/
+  if_->esp -= (unsigned) if_->esp % 4;  
+  // printf("Stack pointer: %p Word Align\n", if_->esp);
+  // decrement stack pointer by size of sentinel
+  if_->esp = (((void**) if_->esp) - 1);
+  // push null pointer sentinel onto stack
+  *((void**)(if_->esp)) = NULL;
+  // printf("Stack pointer: %p Null Pointer sentinel, %p\n", if_->esp, *((void**)(if_->esp)));
+
+  // Push pointers to arguments in reverse order
+  for (int i = argc - 1; i >= 0; i--) {
+    if_->esp = (((void**) if_->esp) - 1);
+    memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
+    // printf("Stack pointer: %p val: %p\n", if_->esp, *((void**) if_->esp));
+  }
+
+  // Push address of argv[0]
+  // Stack Pointer currently pointing towards argv[0]
+  void *addr_argv = if_->esp;
+  //1. decrement stack pointer by size of pointer
+  if_->esp = (((void**) if_->esp) - 1);
+  //2. push pointer to base of argv on stack
+  memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
+  // printf("Stack pointer: %p val: %p\n", ((void**) if_->esp), *((void**) if_->esp));
+
+  /*Push argc
+    1. decrement stack pointer by size of argc
+    2. push argc to stack */
+  if_->esp -= sizeof(argc);
+  memcpy(if_->esp, &argc, sizeof(argc));
+  // printf("Stack pointer: %p argc: %i\n", if_->esp, *(int*)if_->esp);
+
+  /*Make space for fake return address, and push it (NULL), 
+    so that stack frame has same structure as any other
+    1. decrement stack pointer to the next address
+    2. push fake "return address" (null)*/
+  if_->esp = (((void**) if_->esp) - 1);
+  // memcpy doesn't work here
+  *((void**)(if_->esp)) = NULL;
+  // printf("Stack pointer: %p Fake Return Address %i\n", if_->esp, *(int*)if_->esp);
+
+  // hex_dump((uintptr_t) if_->esp, if_->esp, PHYS_BASE - if_->esp, true);
+  // Free up memory
+  palloc_free_page(argv);
 }
 
 /* Waits for thread TID to die and returns its exit status. 
@@ -88,6 +204,13 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // while (true) {}
+  // get current thread
+  // thread holds a list of children
+  // find relevant child in that list
+  // if equal to child thread struct
+  // Return error if child thread is Null or if waited (can't wait twice)is true,
+
   return -1;
 }
 
@@ -97,7 +220,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  
   printf ("%s: exit(%d)\n", cur->name, cur->exit_code);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
