@@ -8,6 +8,9 @@ void
 test_main (void) 
 {
   int pid = exec ("child-bad");
-  msg ("exec() = %d", pid);
+  if (pid < 0){
+    fail ("exec() returned invalid pid: %d", pid);
+  }
+  msg ("exec() returned a valid pid");
   msg ("wait() = %d", wait (pid));
 }
