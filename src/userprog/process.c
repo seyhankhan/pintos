@@ -89,7 +89,29 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  //if pid_t not in current_thread()->children return -1
+  //if child pid_t was terminated by the kernel, return -1. maybe against exited
+  //if child pid_t has already been waited on return -1
+  struct thread *cur = thread_current();
+  int exit_code;
+  struct list_elem *e;
+  struct process_exit_status *status;
+  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    status = list_entry(e, struct process_exit_status, elem);
+    if (status->child_pid == child_tid) {
+      break;
+    }
+  }
+  if (e == list_end(&cur->children_status)) {
+    return -1;
+  }
+  while (!status->exited) {}
+  exit_code = status->exit_code;
+  
+  /*A process should only be able to wait on another once*/
+  list_remove(&status->elem);
+  free(status);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
