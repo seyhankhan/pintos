@@ -114,6 +114,7 @@ struct thread
     struct semaphore sema_execute;      /* Synchronization in process_execute */
     struct file* exec_file;             /* Process is using this executable file */
     int exit_code;
+    struct list fds;
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -123,6 +124,11 @@ struct thread
 struct thread_elem {
    struct list_elem elem; /* list_elem for storing the thread in a list*/
    struct thread *thread; /* pointer to the thread that is being stored in the list*/
+};
+
+struct file_descriptor {
+   int fd;
+   struct file *file;
 };
 
 /* If false (default), use round-robin scheduler.

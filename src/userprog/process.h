@@ -26,4 +26,6 @@ void process_activate (void);
 
 void dec_ref_count(struct process_exit_status *exit_status);
 
+struct file* get_file_from_fd(int fd); 
+
 #endif /* userprog/process.h */
