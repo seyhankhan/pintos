@@ -190,19 +190,20 @@ int filesize (int fd) {
   return file_length(get_file_from_fd(fd));
 }
 
-int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
+int read (int fd, void *buffer, unsigned length) {
   return 0;
 }
 
-void seek (int fd UNUSED, unsigned position UNUSED) {
-  return;   
+void seek (int fd, unsigned position) {
+  struct file* file = get_file_from_fd(fd);
+  return file_seek(file, position);
 }
 
-unsigned tell (int fd UNUSED) {
+unsigned tell (int fd) {
   return 0;
 }
 
-void close (int fd UNUSED) {
+void close (int fd) {
   return;
 }
 
