@@ -98,24 +98,19 @@ void exit (int status) {
 pid_t exec (const char *file) {
   // check_fp_valid((char *) file);
 
-  // char *arg;
-  // char *save_ptr;
-
-  // int filename_length = strlen(file);
-  // char filename_copy[filename_length];
-  // strlcpy(filename_copy, file, filename_length);
-  // arg = strtok_r(filename_copy, " ", &save_ptr);
   pid_t pid = -1;
   if (!is_vaddr(file)) {
     return pid;
   }
-  // if (filesys_open(arg)) {
-  //   // implementation of process_execute in argument passing branch, not here.
-  //   // need to merge changes
+  struct file *f = filesys_open(file);
+  if (f == NULL) {
+    pid = -1;
+  } else {
+    file_close(f);
+  }
   try_acquiring_filesys();
   pid = process_execute(file);
   try_releasing_filesys();
-  // }
   return pid;
 }
 
@@ -130,9 +125,9 @@ bool create (const char *file, unsigned initial_size) {
   // Currently passess all tests for create but needs to be checked
   //all checks complete. create file
   try_acquiring_filesys();
-  int code = filesys_create(file, initial_size);
+  bool success = filesys_create(file, initial_size);
   try_releasing_filesys();
-  return code;
+  return success;
 }
 
 /*Opens the file called file. 
@@ -176,7 +171,6 @@ int open (const char *file) {
 
 bool remove (const char *file) {
   check_fp_valid((char *) file);
-
   // check if filename is empty, in which case can't remove
   if (!strcmp(file, "")) {
     return false;
