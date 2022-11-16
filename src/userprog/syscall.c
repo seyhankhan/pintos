@@ -200,7 +200,8 @@ void seek (int fd, unsigned position) {
 }
 
 unsigned tell (int fd) {
-  return 0;
+  struct file* file = get_file_from_fd(fd);
+  return file_tell(file);
 }
 
 void close (int fd) {
