@@ -134,14 +134,10 @@ int wait (pid_t pid) {
 }
 
 bool create (const char *file, unsigned initial_size) {
-
-  check_fp_valid((char *) file);
-
-  //check if file has no name
-  if (!strcmp(file, "")) {
-    return false;
+  if (file == NULL || !is_vaddr(file)) {
+    exit(-1);
   }
-
+  // Currently passess all tests for create but needs to be checked
   //all checks complete. create file
   return filesys_create(file, initial_size);
 }
