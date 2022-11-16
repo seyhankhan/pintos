@@ -67,48 +67,25 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-    uint32_t *esp = (uint32_t *)f->esp;
-    // Check if address is valid
-    if (!is_vaddr(esp))
-      exit (-1);
-    int system_call_number = *esp;
+  uint32_t *esp = (uint32_t *)f->esp;
+  // Check if address of system call is valid before dereferencing
+  if (!is_vaddr(esp))
+    exit (-1);
+  int system_call_number = *esp;
 
-    // Check if system call is valid
-    if (system_call_number < SYS_HALT || system_call_number > SYS_INUMBER)
-      exit (-1);
-    // array to store arguements passed into the system call
-    // passed to relevant function too
-    void* args[3];
-
-  // array to store arguements passed into the system call
-  // passed to relevant function too
-
-  // Getting the arguments should be done in a better way
-  int arg1 = *(esp + 1);
-  int arg2 = *(esp + 2);
-  int arg3 = *(esp + 3);
-
-  if (!( is_user_vaddr ((void *) arg1) && is_user_vaddr ((void *) arg2) && is_user_vaddr ((void *)arg3)))
+  // Check if system call is valid
+  if (system_call_number < SYS_HALT || system_call_number > SYS_INUMBER)
     exit (-1);
 
-  switch (system_call_number) {
-    case SYS_HALT:
-      halt();
-    break;
-    case SYS_WRITE: 
-      write(arg1, (void *) arg2, arg3);
-    break;
-    // Need to properly deal with exiting
-    case SYS_EXIT:
-      exit(0);
-    break;
-    case SYS_REMOVE:
-      read_args(f->esp, 1, args);
-      try_acquiring_filesys();
-      f->eax = remove(*(char**)args[0]);
-      try_releasing_filesys();
-    break;
-  }
+  // Generic Function wrapper
+  int (*function) (int, int, int) = syscall_handlers[system_call_number];
+  // Max 3 arguments, if an argument is not valid then it just passes null
+  // the actual function will deal with the arguments it needs
+  int arg1 = is_vaddr((void *) (esp + 1)) ? *(esp + 1) : (int) NULL;
+  int arg2 = is_vaddr((void *) (esp + 2)) ? *(esp + 2) : (int) NULL;
+  int arg3 = is_vaddr((void *) (esp + 3)) ? *(esp + 3) : (int) NULL;
+
+  f->eax = function(arg1,arg2,arg3);
 
 }
 
@@ -183,7 +160,9 @@ bool remove (const char *file) {
   if (!strcmp(file, "")) {
     return false;
   }
+  try_acquiring_filesys();
   bool deleted_file = filesys_remove(file);
+  try_releasing_filesys();
   return deleted_file;
 }
 
