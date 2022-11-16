@@ -113,7 +113,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore sema_execute;      /* Synchronization in process_execute */
     struct file* exec_file;             /* Process is using this executable file */
-    int exit_code;
+    struct list opened_files;           /* A list of files opened by the thread*/
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

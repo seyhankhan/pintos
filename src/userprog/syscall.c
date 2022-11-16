@@ -24,25 +24,12 @@ void try_releasing_filesys(void);
 bool is_vaddr(const void *uaddr);
 static void *syscall_handlers[MAX_SYSCALLS];
 
-int halt_handler(struct intr_frame *f UNUSED);
-int exit_handler(struct intr_frame *f UNUSED); 
-int exec_handler(struct intr_frame *f UNUSED);
-int wait_handler(struct intr_frame *f UNUSED);
-int create_handler(struct intr_frame *f UNUSED);
-int remove_handler(struct intr_frame *f UNUSED); 
-int open_handler(struct intr_frame *f UNUSED); 
-int filesize_handler(struct intr_frame *f UNUSED);
-int read_handler(struct intr_frame *f UNUSED); 
-int write_handler(struct intr_frame *f UNUSED); 
-int seek_handler(struct intr_frame *f UNUSED); 
-int tell_handler(struct intr_frame *f UNUSED); 
-int close_handler(struct intr_frame *f UNUSED); 
+static int get_next_fd(void);
+struct file_wrapper *get_file_by_fd (int fd);
 
 //should we make argument to this function void* or const char *?
 void check_fp_valid(void *file);
-
 struct lock lock_filesys;
-
 
 void
 syscall_init (void) 
@@ -109,23 +96,26 @@ void exit (int status) {
 }
 
 pid_t exec (const char *file) {
-  check_fp_valid((char *) file);
+  // check_fp_valid((char *) file);
 
-  char *arg;
-  char *save_ptr;
+  // char *arg;
+  // char *save_ptr;
 
-  int filename_length = strlen(file);
-  char filename_copy[filename_length];
-  strlcpy(filename_copy, file, filename_length);
-  arg = strtok_r(filename_copy, " ", &save_ptr);
-
+  // int filename_length = strlen(file);
+  // char filename_copy[filename_length];
+  // strlcpy(filename_copy, file, filename_length);
+  // arg = strtok_r(filename_copy, " ", &save_ptr);
   pid_t pid = -1;
-
-  if (filesys_open(arg)) {
-    // implementation of process_execute in argument passing branch, not here.
-    // need to merge changes
-    pid = process_execute(file);
+  if (!is_vaddr(file)) {
+    return pid;
   }
+  // if (filesys_open(arg)) {
+  //   // implementation of process_execute in argument passing branch, not here.
+  //   // need to merge changes
+  try_acquiring_filesys();
+  pid = process_execute(file);
+  try_releasing_filesys();
+  // }
   return pid;
 }
 
@@ -150,25 +140,37 @@ bool create (const char *file, unsigned initial_size) {
   or -1 if the file could not be opened.*/
 
 int open (const char *file) {
-  if (file == NULL || !is_vaddr(file)) {
+  if (!is_vaddr(file)) {
+    exit(-1);
+  }
+  if (strcmp(file, "") == 0) {
     return -1;
   }
   struct file *opened_file;
+  struct file_wrapper *wrapped_file;
 
   try_acquiring_filesys();
-  opened_file = file_open((struct inode *)file);
+  if (!is_vaddr((struct inode *) file)) {
+    return -1;
+  }
+  opened_file = filesys_open(file);
   try_releasing_filesys();
 
   if (opened_file == NULL) {
     return -1;
   }
+  // Do not forget to free
+  wrapped_file = malloc (sizeof(struct file_wrapper));
+  if (wrapped_file == NULL) {
+    return -1;
+  }
+  try_acquiring_filesys();
+  wrapped_file->file = opened_file;
+  wrapped_file->fd = get_next_fd();
+  list_push_back(&thread_current()->opened_files, &wrapped_file->file_elem);
+  try_releasing_filesys();
 
-  /*TODO:
-    Keep track of files opened by thread
-    Give files fd
-    return the fd of file*/ 
-  // Start counting fds from 2 , 0 and are reserved
-  return 2;  
+  return wrapped_file->fd;  
 }
 
 
@@ -195,15 +197,40 @@ int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
 }
 
 void seek (int fd UNUSED, unsigned position UNUSED) {
-  return;   
+  struct file_wrapper *file;
+  file = get_file_by_fd(fd);
+  if (file == NULL) {
+    exit(-1);
+  }
+  try_acquiring_filesys();
+  file_seek(file->file, position);
+  try_releasing_filesys();
 }
 
 unsigned tell (int fd UNUSED) {
-  return 0;
+  struct file_wrapper *file;
+  unsigned pos;
+  file = get_file_by_fd(fd);
+  if (file == NULL) {
+    exit(-1);
+  }
+  try_acquiring_filesys();
+  pos = file_tell(file->file);
+  try_releasing_filesys();
+  return pos;
 }
 
 void close (int fd UNUSED) {
-  return;
+  struct file_wrapper *file;
+  try_acquiring_filesys();
+  file = get_file_by_fd(fd);
+  if (file == NULL) {
+    exit(-1);
+  }
+  list_remove(&file->file_elem);
+  file_close(file->file);
+  free(file);
+  try_releasing_filesys();
 }
 
 int write (int fd, const void *buffer, unsigned length) {
@@ -249,6 +276,44 @@ void try_releasing_filesys() {
   }
 }
 
+int get_next_fd() {
+  static int next_fd = 2;
+  int fd;
+  try_acquiring_filesys();
+  fd = next_fd++;
+  try_releasing_filesys();
+  return fd;
+}
+
+/* USERPROG Function, given the tid returns the thread with that tid*/
+struct file_wrapper *
+get_file_by_fd (int fd)
+{
+  struct list_elem *elem;
+  elem = list_begin (&thread_current()->opened_files);
+  while (elem != list_end (&thread_current()->opened_files)) {
+    struct file_wrapper *f = list_entry (elem, struct file_wrapper, file_elem);
+    if (f->fd == fd)
+      return f;
+    elem = list_next (elem);
+  }
+  return NULL;
+}
+
+// Taken from thread.c
+// static tid_t
+// allocate_tid (void) 
+// {
+//   static tid_t next_tid = 1;
+//   tid_t tid;
+
+//   lock_acquire (&tid_lock);
+//   tid = next_tid++;
+//   lock_release (&tid_lock);
+
+//   return tid;
+// }
+
 
 /* Validate a user's pointer to a virtual address
   must not be
@@ -260,6 +325,8 @@ void try_releasing_filesys() {
   freeing its resources. */
 bool is_vaddr(const void *uaddr)
 {
+  if (uaddr == NULL)
+    return false;
   if (!is_user_vaddr(uaddr))
     return false;
   return pagedir_get_page(thread_current()->pagedir, uaddr) != NULL;

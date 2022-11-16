@@ -677,7 +677,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   
   #ifdef USERPROG
-  t->exit_code = 0;
+  list_init(&t->opened_files);
   sema_init(&t->sema_execute, 0);
   #endif
 

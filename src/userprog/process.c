@@ -106,9 +106,8 @@ start_process (void *file_name_)
     curr->exec_file = file;
     file_deny_write(file);
     sema_up (&curr->sema_execute);  
-
   } else {
-    curr->exit_code = -1;
+    curr->exit_status->exit_code = -1;
     sema_up (&curr->sema_execute); 
     thread_exit ();
   }
