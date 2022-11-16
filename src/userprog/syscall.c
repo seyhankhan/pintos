@@ -191,6 +191,27 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
+  /*
+
+  if (!buffer || !is_user_vaddr(buffer)) {
+    exit(-1);
+  }
+
+  if (fd == STDIN_FILENO) {
+    input_getc();
+    return length;
+  }
+
+  struct file* file = get_file_from_fd(fd);
+  if (!file) {
+    lock_release(&lock_filesys);
+    exit(-1);
+  }
+
+  int bytes = file_read(file, buffer, length);
+  return bytes;
+
+*/
   return 0;
 }
 
@@ -205,16 +226,17 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
+  /*
   struct list_elem* e;
   struct list* file_descriptors = &thread_current()->fds;
 
   for (e = list_begin(file_descriptors); e != list_end(file_descriptors); e = list_next(e)) {
     struct file_descriptor* f = list_entry(e, struct file_descriptor, elem);
     if (f->fd == fd) {
-      list_remove(e);
-      break;
+      return f->file;
     }
   }
+  */
 }
 
 int write (int fd, const void *buffer, unsigned length) {

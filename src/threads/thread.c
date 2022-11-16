@@ -430,7 +430,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-  try_releasing_filesys();
+  //try_releasing_filesys();
 
 #ifdef USERPROG
   process_exit ();
