@@ -16,6 +16,7 @@
 #include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -429,6 +430,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
+  try_releasing_filesys();
 
 #ifdef USERPROG
   process_exit ();

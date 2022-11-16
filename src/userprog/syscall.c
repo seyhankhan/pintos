@@ -186,8 +186,8 @@ bool remove (const char *file) {
 }
 
 
-int filesize (int fd UNUSED) {
-  return 0;
+int filesize (int fd) {
+  return file_length(get_file_from_fd(fd));
 }
 
 int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
