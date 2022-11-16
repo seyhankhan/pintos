@@ -81,6 +81,12 @@ syscall_handler (struct intr_frame *f UNUSED)
   int (*function) (int, int, int) = syscall_handlers[system_call_number];
   // Max 3 arguments, if an argument is not valid then it just passes null
   // the actual function will deal with the arguments it needs
+
+  // If first argument is invalid then the rest are too so exit with code -1
+  if (!is_vaddr((void *) (esp + 1))) {
+    exit(-1);
+  }
+
   int arg1 = is_vaddr((void *) (esp + 1)) ? *(esp + 1) : (int) NULL;
   int arg2 = is_vaddr((void *) (esp + 2)) ? *(esp + 2) : (int) NULL;
   int arg3 = is_vaddr((void *) (esp + 3)) ? *(esp + 3) : (int) NULL;
