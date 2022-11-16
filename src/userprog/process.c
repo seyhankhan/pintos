@@ -222,7 +222,7 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
   }
 
-  sema_down(&cur->exit_status->sema);
+  sema_down(&status->sema);
   
   //while (!status->exited) {}
   exit_code = status->exit_code;
@@ -240,7 +240,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  
+  printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   dec_ref_count(cur->exit_status);
 
   struct process_exit_status *status;
