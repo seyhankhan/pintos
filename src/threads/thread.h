@@ -129,6 +129,7 @@ struct thread_elem {
 struct file_descriptor {
    int fd;
    struct file *file;
+   struct list_elem elem;
 };
 
 /* If false (default), use round-robin scheduler.

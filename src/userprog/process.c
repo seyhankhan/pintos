@@ -644,8 +644,19 @@ install_page (void *upage, void *kpage, bool writable)
 }
 
 struct file* get_file_from_fd(int fd) {
-  struct list_elem *e;
+  struct list_elem* e;
+  struct list* file_descriptors = &thread_current()->fds;
 
+  if (list_empty(file_descriptors)) {
+    return NULL;
+  }
+
+  for (e = list_begin(file_descriptors); e != list_end(file_descriptors); e = list_next(e)) {
+    struct file_descriptor* f = list_entry(e, struct file_descriptor, elem);
+    if (f->fd == fd) {
+      return f->file;
+    }
+  }
 
   return NULL;
 
