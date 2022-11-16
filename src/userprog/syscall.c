@@ -89,7 +89,6 @@ void exit (int status) {
   cur->exit_status->exit_code = status;
   cur->exit_status->exited = true;
   lock_release(&cur->exit_status->lock);
-  sema_up(&cur->exit_status->sema);
   thread_exit();
 }
 
