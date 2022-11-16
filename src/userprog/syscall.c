@@ -180,9 +180,9 @@ bool remove (const char *file) {
     return false;
   }
   try_acquiring_filesys();
-  bool deleted_file = filesys_remove(file);
+  bool is_file_deleted = filesys_remove(file);
   try_releasing_filesys();
-  return deleted_file;
+  return is_file_deleted;
 }
 
 
@@ -205,7 +205,16 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
-  return;
+  struct list_elem* e;
+  struct list* file_descriptors = &thread_current()->fds;
+
+  for (e = list_begin(file_descriptors); e != list_end(file_descriptors); e = list_next(e)) {
+    struct file_descriptor* f = list_entry(e, struct file_descriptor, elem);
+    if (f->fd == fd) {
+      list_remove(e);
+      break;
+    }
+  }
 }
 
 int write (int fd, const void *buffer, unsigned length) {
