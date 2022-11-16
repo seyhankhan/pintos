@@ -18,10 +18,12 @@
 #include "threads/palloc.h"
 
 #define MAX_SYSCALLS 21
+
+typedef int pid_t;
+
 static void syscall_handler (struct intr_frame *);
-void read_args(void* esp, int num_args, void **args);
-void try_acquiring_filesys(void);
-void try_releasing_filesys(void);
+static void try_acquiring_filesys(void);
+static void try_releasing_filesys(void);
 bool is_vaddr(const void *uaddr);
 static void *syscall_handlers[MAX_SYSCALLS];
 
@@ -49,7 +51,7 @@ static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
 
 //should we make argument to this function void* or const char *?
-void check_fp_valid(void *file);
+static void check_fp_valid(void *file);
 struct lock lock_filesys;
 
 void
@@ -278,7 +280,7 @@ static int write (int fd, const void *buffer, unsigned length) {
 }
 
 //should we make argument to this function void* or const char *?
-void check_fp_valid(void* file) {
+static void check_fp_valid(void* file) {
   //check if pointer to file passed in is valid
   if ((file) || (!is_vaddr(file))) {
     exit(-1);
@@ -289,19 +291,19 @@ void check_fp_valid(void* file) {
   }
 }
 
-void try_acquiring_filesys() {
+static void try_acquiring_filesys() {
   if (lock_filesys.holder != thread_current()) {
     lock_acquire(&lock_filesys);
   }
 }
 
-void try_releasing_filesys() {
+static void try_releasing_filesys() {
   if (lock_filesys.holder != thread_current()) {
     lock_release(&lock_filesys);
   }
 }
 
-int get_next_fd() {
+static int get_next_fd() {
   static int next_fd = 2;
   int fd;
   try_acquiring_filesys();
