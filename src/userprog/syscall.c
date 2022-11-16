@@ -15,6 +15,7 @@
 #include "threads/malloc.h"
 #include "lib/kernel/console.h"
 #include "threads/synch.h"
+#include "threads/palloc.h"
 
 #define MAX_SYSCALLS 21
 static void syscall_handler (struct intr_frame *);
@@ -102,12 +103,22 @@ pid_t exec (const char *file) {
   if (!is_vaddr(file)) {
     return pid;
   }
-  struct file *f = filesys_open(file);
+  char *arg;
+  char *save_ptr, *mod_fn;
+
+  mod_fn = palloc_get_page (0);
+  if (mod_fn == NULL)
+    return pid;
+  strlcpy (mod_fn, file, PGSIZE);
+  arg = strtok_r(mod_fn," ", &save_ptr);
+
+  struct file *f = filesys_open(arg);
   if (f == NULL) {
-    pid = -1;
+    return -1;
   } else {
     file_close(f);
   }
+  palloc_free_page(mod_fn);
   try_acquiring_filesys();
   pid = process_execute(file);
   try_releasing_filesys();
