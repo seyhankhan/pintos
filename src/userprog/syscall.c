@@ -84,7 +84,12 @@ void halt(void) {
 }
 
 void exit (int status) {
-  thread_current()->exit_code = status;
+  struct thread *cur = thread_current();
+  lock_acquire(&cur->exit_status->lock);
+  cur->exit_status->exit_code = status;
+  cur->exit_status->exited = true;
+  lock_release(&cur->exit_status->lock);
+  sema_up(&cur->exit_status->sema);
   thread_exit();
 }
 
@@ -109,8 +114,8 @@ pid_t exec (const char *file) {
   return pid;
 }
 
-int wait (pid_t  pid UNUSED) {
-  return 0;
+int wait (pid_t pid) {
+  return process_wait(pid);
 }
 
 bool create (const char *file, unsigned initial_size) {

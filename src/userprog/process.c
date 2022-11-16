@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -204,14 +205,32 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // while (true) {}
-  // get current thread
-  // thread holds a list of children
-  // find relevant child in that list
-  // if equal to child thread struct
-  // Return error if child thread is Null or if waited (can't wait twice)is true,
+  //if pid_t not in current_thread()->children return -1
+  //if child pid_t was terminated by the kernel, return -1. maybe against exited
+  //if child pid_t has already been waited on return -1
+  struct thread *cur = thread_current();
+  int exit_code;
+  struct list_elem *e;
+  struct process_exit_status *status = NULL;
+  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    status = list_entry(e, struct process_exit_status, elem);
+    if (status->child_pid == child_tid) {
+      break;
+    }
+  }
+  if (status == NULL) {
+    return -1;
+  }
 
-  return -1;
+  sema_down(&cur->exit_status->sema);
+  
+  //while (!status->exited) {}
+  exit_code = status->exit_code;
+  
+  /*A process should only be able to wait on another once*/
+  list_remove(&status->elem);
+  free(status);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -220,7 +239,17 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  printf ("%s: exit(%d)\n", cur->name, cur->exit_code);
+
+  
+  dec_ref_count(cur->exit_status);
+
+  struct process_exit_status *status;
+  for (struct list_elem *e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    status = list_entry(e, struct process_exit_status, elem);
+    dec_ref_count(status);
+    list_remove(e);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -238,6 +267,17 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 }
+
+void dec_ref_count(struct process_exit_status *exit_status) {
+  lock_acquire(&exit_status->lock);
+  exit_status->ref_count--;
+  if (exit_status->ref_count == 0) {
+    free(exit_status);
+  } else {
+    lock_release(&exit_status->lock);
+  }
+}
+
 
 /* Sets up the CPU for running user code in the current
    thread.
