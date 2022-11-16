@@ -139,21 +139,38 @@ bool create (const char *file, unsigned initial_size) {
   }
   // Currently passess all tests for create but needs to be checked
   //all checks complete. create file
-  return filesys_create(file, initial_size);
+  try_acquiring_filesys();
+  int code = filesys_create(file, initial_size);
+  try_releasing_filesys();
+  return code;
 }
 
-// reads num_args arguments from esp, stores in args
-void read_args(void* esp, int num_args, void **args) {
-  int i = 0;
-  void *sp = esp;
-  for (; i < num_args; i++) {
-    sp += 4;
-    if (!sp || !is_user_vaddr(sp)) {
-      exit(-1);
-    }
-    args[i] = sp;
+/*Opens the file called file. 
+  Returns a nonnegative integer handle called a “file descriptor” (fd), 
+  or -1 if the file could not be opened.*/
+
+int open (const char *file) {
+  if (file == NULL || !is_vaddr(file)) {
+    return -1;
   }
+  struct file *opened_file;
+
+  try_acquiring_filesys();
+  opened_file = file_open((struct inode *)file);
+  try_releasing_filesys();
+
+  if (opened_file == NULL) {
+    return -1;
+  }
+
+  /*TODO:
+    Keep track of files opened by thread
+    Give files fd
+    return the fd of file*/ 
+  // Start counting fds from 2 , 0 and are reserved
+  return 2;  
 }
+
 
 bool remove (const char *file) {
   check_fp_valid((char *) file);
@@ -168,9 +185,6 @@ bool remove (const char *file) {
   return deleted_file;
 }
 
-int open (const char *file UNUSED) {
-  return 0;  
-}
 
 int filesize (int fd UNUSED) {
   return 0;
@@ -195,7 +209,9 @@ void close (int fd UNUSED) {
 int write (int fd, const void *buffer, unsigned length) {
   // If no bytes have been written return default of 0
   int ret = 0;
-
+  if (fd == STDIN_FILENO) {
+    return 0;
+  }
   if (fd == STDOUT_FILENO) {
     // Writing to the console
     // returns number of bytes written
