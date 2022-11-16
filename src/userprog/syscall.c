@@ -39,6 +39,12 @@ static void seek (int fd, unsigned position);
 static unsigned tell (int fd);
 static void close (int fd);
 
+struct file_wrapper {
+    struct file *file;
+    struct list_elem file_elem;
+    int fd;
+};
+
 static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
 

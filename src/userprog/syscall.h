@@ -12,10 +12,4 @@ void try_releasing_filesys(void);
 void read_args(void* esp, int num_args, void **args);
 void check_fp_valid(void* file);
 
-struct file_wrapper {
-    struct file *file;
-    struct list_elem file_elem;
-    int fd;
-};
-
 #endif /* userprog/syscall.h */
