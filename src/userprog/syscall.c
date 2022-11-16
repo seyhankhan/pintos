@@ -16,10 +16,27 @@
 #include "lib/kernel/console.h"
 #include "threads/synch.h"
 
+#define MAX_SYSCALLS 21
 static void syscall_handler (struct intr_frame *);
 void read_args(void* esp, int num_args, void **args);
 void try_acquiring_filesys(void);
 void try_releasing_filesys(void);
+bool is_vaddr(const void *uaddr);
+static void *syscall_handlers[MAX_SYSCALLS];
+
+int halt_handler(struct intr_frame *f UNUSED);
+int exit_handler(struct intr_frame *f UNUSED); 
+int exec_handler(struct intr_frame *f UNUSED);
+int wait_handler(struct intr_frame *f UNUSED);
+int create_handler(struct intr_frame *f UNUSED);
+int remove_handler(struct intr_frame *f UNUSED); 
+int open_handler(struct intr_frame *f UNUSED); 
+int filesize_handler(struct intr_frame *f UNUSED);
+int read_handler(struct intr_frame *f UNUSED); 
+int write_handler(struct intr_frame *f UNUSED); 
+int seek_handler(struct intr_frame *f UNUSED); 
+int tell_handler(struct intr_frame *f UNUSED); 
+int close_handler(struct intr_frame *f UNUSED); 
 
 //should we make argument to this function void* or const char *?
 void check_fp_valid(void *file);
@@ -32,36 +49,54 @@ syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&lock_filesys);
+  syscall_handlers[SYS_HALT] = &halt;
+  syscall_handlers[SYS_EXIT] = &exit;
+  syscall_handlers[SYS_EXEC] = &exec;
+  syscall_handlers[SYS_WAIT] = &wait;
+  syscall_handlers[SYS_CREATE] = &create;
+  syscall_handlers[SYS_REMOVE] = &remove;
+  syscall_handlers[SYS_OPEN] =  &open;
+  syscall_handlers[SYS_FILESIZE] = &filesize;
+  syscall_handlers[SYS_READ] = &read;
+  syscall_handlers[SYS_WRITE] = write;
+  syscall_handlers[SYS_SEEK] =  &seek;
+  syscall_handlers[SYS_TELL] = &tell;
+  syscall_handlers[SYS_CLOSE] = &close;
 }
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-    int system_call_number = *(int*)(f->esp);
+    uint32_t *esp = (uint32_t *)f->esp;
+    // Check if address is valid
+    if (!is_vaddr(esp))
+      exit (-1);
+    int system_call_number = *esp;
 
+    // Check if system call is valid
+    if (system_call_number < SYS_HALT || system_call_number > SYS_INUMBER)
+      exit (-1);
     // array to store arguements passed into the system call
     // passed to relevant function too
     void* args[3];
 
   // array to store arguements passed into the system call
   // passed to relevant function too
-  // void* args[3];
-  // hex_dump((uintptr_t) f->esp, f->esp, PHYS_BASE - f->esp, true);
-  int *esp = f->esp;
 
-  esp++;
   // Getting the arguments should be done in a better way
-  int arg1 = *esp;
-  int arg2 = *(esp + 1);
-  int arg3 = *(esp + 2);
-  
+  int arg1 = *(esp + 1);
+  int arg2 = *(esp + 2);
+  int arg3 = *(esp + 3);
+
+  if (!( is_user_vaddr ((void *) arg1) && is_user_vaddr ((void *) arg2) && is_user_vaddr ((void *)arg3)))
+    exit (-1);
+
   switch (system_call_number) {
     case SYS_HALT:
       halt();
     break;
-    case SYS_WRITE:
-      // printf("Called Write\n");
-      f->eax =write(arg1, (void * ) arg2, arg3);
+    case SYS_WRITE: 
+      write(arg1, (void *) arg2, arg3);
     break;
     // Need to properly deal with exiting
     case SYS_EXIT:
@@ -75,8 +110,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     break;
   }
 
-  //printf ("system call!\n");
-  //thread_exit ();
 }
 
 void halt(void) {
@@ -198,7 +231,7 @@ int write (int fd, const void *buffer, unsigned length) {
 //should we make argument to this function void* or const char *?
 void check_fp_valid(void* file) {
   //check if pointer to file passed in is valid
-  if ((file) || (!is_user_vaddr(file))) {
+  if ((file) || (!is_vaddr(file))) {
     exit(-1);
   }
   if (!pagedir_get_page(thread_current()->pagedir, file)) {
@@ -217,4 +250,20 @@ void try_releasing_filesys() {
   if (lock_filesys.holder != thread_current()) {
     lock_release(&lock_filesys);
   }
+}
+
+
+/* Validate a user's pointer to a virtual address
+  must not be
+    - null pointer
+    - pointer to unmapped virtual memory
+    - pointer to kernel virtual address space (above PHYS_BASE).
+  All of these types of invalid pointers must be rejected without harm to the
+  kernel or other running processes, by terminating the offending process and
+  freeing its resources. */
+bool is_vaddr(const void *uaddr)
+{
+  if (!is_user_vaddr(uaddr))
+    return false;
+  return pagedir_get_page(thread_current()->pagedir, uaddr) != NULL;
 }
