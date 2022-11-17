@@ -335,7 +335,7 @@ static void try_acquiring_filesys() {
 }
 
 static void try_releasing_filesys() {
-  if (lock_filesys.holder != thread_current()) {
+  if (lock_filesys.holder == thread_current()) {
     lock_release(&lock_filesys);
   }
 }
