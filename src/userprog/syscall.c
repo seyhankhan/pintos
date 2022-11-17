@@ -97,13 +97,12 @@ syscall_handler (struct intr_frame *f )
   if (!is_vaddr((void *) (esp + 1))) {
     exit(-1);
   }
-
+  // Validates each pointer, if pointer is not valid passes NULL; 
   int arg1 = is_vaddr((void *) (esp + 1)) ? *(esp + 1) : (int) NULL;
   int arg2 = is_vaddr((void *) (esp + 2)) ? *(esp + 2) : (int) NULL;
   int arg3 = is_vaddr((void *) (esp + 3)) ? *(esp + 3) : (int) NULL;
 
   f->eax = function(arg1,arg2,arg3);
-
 }
 
 static void halt(void) {
@@ -112,7 +111,7 @@ static void halt(void) {
 
 static void exit (int status) {
   struct thread *cur = thread_current();
-  // lock_acquire(&cur->exit_status->lock);
+  // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {
     try_releasing_filesys();
   }
@@ -130,8 +129,6 @@ static void exit (int status) {
 }
 
 static pid_t exec (const char *file) {
-  // check_fp_valid((char *) file);
-
   pid_t pid = -1;
   if (!is_vaddr(file)) {
     return pid;
@@ -139,6 +136,7 @@ static pid_t exec (const char *file) {
   char *arg;
   char *save_ptr, *file_cp;
 
+  // Is freed at the end of this function
   file_cp = palloc_get_page (0);
   if (file_cp == NULL)
     return pid;
@@ -148,7 +146,7 @@ static pid_t exec (const char *file) {
   try_acquiring_filesys();
   struct file *f = filesys_open(arg);
   if (f == NULL) {
-    return -1;
+    return pid;
   } else {
     file_close(f);
   }
@@ -201,7 +199,7 @@ static int open (const char *file) {
   if (opened_file == NULL) {
     return -1;
   }
-  // Do not forget to free
+  // Is freed in exit()
   wrapped_file = malloc (sizeof(struct file_wrapper));
   if (wrapped_file == NULL) {
     return -1;
