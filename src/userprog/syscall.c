@@ -220,7 +220,7 @@ static int filesize (int fd UNUSED) {
   return 0;
 }
 
-int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
+static int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
   int length_read = 0;
   // Check to see if the addresses from where we are reading up until the end 
   // are valid, ottherwise exit with status code -1
