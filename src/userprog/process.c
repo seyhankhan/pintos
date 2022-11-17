@@ -61,7 +61,6 @@ process_execute (const char *file_name)
   // TODO: Find out where it's supposed to be freed
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-    return tid;
   }
   // Sema down on the thread that was just created
   sema_down(&get_thread_by_tid(tid)->sema_execute);
@@ -250,8 +249,6 @@ process_exit (void)
     list_remove(e);
   }
 
-  sema_up(&cur->exit_status->sema);
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -268,6 +265,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  sema_up(&cur->exit_status->sema);
 }
 
 void dec_ref_count(struct process_exit_status *exit_status) {
