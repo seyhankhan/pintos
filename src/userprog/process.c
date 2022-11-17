@@ -265,8 +265,11 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-  file_allow_write(cur->exec_file);
+  // Tests multi-oom - tp stop kernel panick do NULL check
+  if (cur->exec_file != NULL) {
+    file_allow_write(cur->exec_file);
+  }
+  
   sema_up(&cur->exit_status->sema);
 }
 
