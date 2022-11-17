@@ -266,6 +266,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+  file_allow_write(cur->exec_file);
   sema_up(&cur->exit_status->sema);
 }
 
