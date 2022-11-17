@@ -60,7 +60,6 @@ process_execute (const char *file_name)
   palloc_free_page(mod_fn);
 
   // If thread wasn't created successfully free fn_copy
-  // TODO: Find out where it's supposed to be freed
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
   }
@@ -98,31 +97,30 @@ start_process (void *file_name_)
     for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
       argv[argc] = token;
       ++argc;
-    }
-    argv[argc] = (char *) 0;
+  }
+  argv[argc] = (char *) 0;
 
-    success = load (argv[0], &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
 
 
-    if(success){
-      pass_args_and_setup_stack(argv, argc, &if_);
-      // If file currently running, deny write to executable
-      // Lock file system and release lock
-      struct file *file = filesys_open(file_name);
-      curr->exec_file = file;
-      file_deny_write(file);
-      // Free up memory
-      palloc_free_page(argv);
-      sema_up (&curr->sema_execute);  
-    } else {
-      curr->exit_status->exit_code = -1;
-      /* If load failed, quit. */
-      palloc_free_page (file_name);
-      // If failed free argv too
-      palloc_free_page(argv);   
-      sema_up (&curr->sema_execute); 
-      thread_exit ();
-    }
+  if(success){
+    pass_args_and_setup_stack(argv, argc, &if_);
+    // If file currently running, deny write to executable
+    // Lock file system and release lock
+    struct file *file = filesys_open(file_name);
+    curr->exec_file = file;
+    file_deny_write(file);
+    // Free up memory
+    palloc_free_page(argv);
+    sema_up (&curr->sema_execute);  
+  } 
+  else {
+    curr->exit_status->exit_code = -1;
+    /* If load failed, quit. */
+    // If failed free argv too
+    palloc_free_page(argv);   
+    sema_up (&curr->sema_execute); 
+    } 
   }
   palloc_free_page (file_name);
 
@@ -142,16 +140,21 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
   /* Push Arguments to the stack frame - order doesn't matter for now 
      as they will be referenced by pointers*/
   void *ptr_arr[argc];
+  int length = 0;
   for (int i = argc - 1; i >= 0; i--) {
     // Need to keep in mind the null byte at the end of the string
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
+    length += token_length;
+    if (length > 4000) {
+      sema_up(&thread_current()->sema_execute);
+      thread_exit();
+    }
     // Decrement stackpointer to fit length of string + null byte
     if_->esp = (void *) (((char*) if_->esp) - token_length);
     // Note: strlcpy automatically ends token with null byte so no need to append
     strlcpy ((char*)if_->esp, argv[i], token_length);
     // Store the pointer of the argument that was just pushed on to the stack
     ptr_arr[i] = if_->esp;
-    // TODO: Remove Debug Print statement so tests pass
   }
 
   /* Round stack pointer down to a multiple of 4 before pushing pointers
