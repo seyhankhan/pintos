@@ -76,7 +76,7 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f ) 
 {
   uint32_t *esp = (uint32_t *)f->esp;
   // Check if address of system call is valid before dereferencing
@@ -216,11 +216,18 @@ static bool remove (const char *file) {
 }
 
 
-static int filesize (int fd UNUSED) {
-  return 0;
+static int filesize (int fd ) {
+  struct file_wrapper *fw = get_file_by_fd(fd);
+  if (fw == NULL) {
+    return -1;
+  }
+  try_acquiring_filesys();
+  int size = file_length(fw->file);
+  try_releasing_filesys()
+  return size;
 }
 
-static int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
+static int read (int fd, void *buffer, unsigned length) {
   int length_read = 0;
   // Check to see if the addresses from where we are reading up until the end 
   // are valid, ottherwise exit with status code -1
@@ -249,7 +256,7 @@ static int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
   return length_read;
 }
 
-static void seek (int fd UNUSED, unsigned position UNUSED) {
+static void seek (int fd , unsigned position ) {
   struct file_wrapper *file;
   file = get_file_by_fd(fd);
   if (file == NULL) {
@@ -260,7 +267,7 @@ static void seek (int fd UNUSED, unsigned position UNUSED) {
   try_releasing_filesys();
 }
 
-static unsigned tell (int fd UNUSED) {
+static unsigned tell (int fd ) {
   struct file_wrapper *file;
   unsigned pos;
   file = get_file_by_fd(fd);
@@ -273,7 +280,7 @@ static unsigned tell (int fd UNUSED) {
   return pos;
 }
 
-static void close (int fd UNUSED) {
+static void close (int fd ) {
   struct file_wrapper *file;
   try_acquiring_filesys();
   file = get_file_by_fd(fd);
