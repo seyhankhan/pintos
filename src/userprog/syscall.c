@@ -23,8 +23,6 @@
 typedef int pid_t;
 
 static void syscall_handler (struct intr_frame *);
-static void try_acquiring_filesys(void);
-static void try_releasing_filesys(void);
 bool is_vaddr(const void *uaddr);
 static void *syscall_handlers[MAX_SYSCALLS];
 
@@ -113,7 +111,7 @@ static void exit (int status) {
   struct thread *cur = thread_current();
   // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {
-    try_releasing_filesys();
+    lock_release(&lock_filesys);
   }
   // Close all opened files
   struct list_elem *elem;
@@ -143,19 +141,19 @@ static pid_t exec (const char *file) {
   strlcpy (file_cp, file, PGSIZE);
   arg = strtok_r(file_cp," ", &save_ptr);
 
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   struct file *f = filesys_open(arg);
   if (f == NULL) {
     return pid;
   } else {
     file_close(f);
   }
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
 
   palloc_free_page(file_cp);
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   pid = process_execute(file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
   return pid;
 }
 
@@ -169,9 +167,9 @@ static bool create (const char *file, unsigned initial_size) {
   }
   // Currently passess all tests for create but needs to be checked
   //all checks complete. create file
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   bool success = filesys_create(file, initial_size);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
   return success;
 }
 
@@ -189,12 +187,12 @@ static int open (const char *file) {
   struct file *opened_file;
   struct file_wrapper *wrapped_file;
 
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   if (!is_vaddr((struct inode *) file)) {
     return -1;
   }
   opened_file = filesys_open(file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
 
   if (opened_file == NULL) {
     return -1;
@@ -204,11 +202,11 @@ static int open (const char *file) {
   if (wrapped_file == NULL) {
     return -1;
   }
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   wrapped_file->file = opened_file;
   wrapped_file->fd = get_next_fd();
   list_push_back(&thread_current()->opened_files, &wrapped_file->file_elem);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
 
   return wrapped_file->fd;  
 }
@@ -218,7 +216,7 @@ static bool remove (const char *file) {
   // check_fp_valid((char *) file);
   
   // check if filename is empty, in which case can't remove
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   struct file *f = filesys_open(file);
   if (f == NULL) {
     exit(-1);
@@ -226,7 +224,7 @@ static bool remove (const char *file) {
     file_close(f);
   }
   bool deleted_file = filesys_remove(file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
   return deleted_file;
 }
 
@@ -236,9 +234,9 @@ static int filesize (int fd ) {
   if (fw == NULL) {
     return -1;
   }
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   int size = file_length(fw->file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
   return size;
 }
 
@@ -263,9 +261,9 @@ static int read (int fd, void *buffer, unsigned length) {
     if (f == NULL) {
       return -1;
     }
-    try_acquiring_filesys();
+    lock_acquire(&lock_filesys);
     length_read = file_read(f->file, buffer, length);
-    try_releasing_filesys();
+    lock_release(&lock_filesys);
   }
   // printf("returning with length %i\n", length_read);
   return length_read;
@@ -277,9 +275,9 @@ static void seek (int fd , unsigned position ) {
   if (file == NULL) {
     exit(-1);
   }
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   file_seek(file->file, position);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
 }
 
 static unsigned tell (int fd ) {
@@ -289,9 +287,9 @@ static unsigned tell (int fd ) {
   if (file == NULL) {
     exit(-1);
   }
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   pos = file_tell(file->file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
   return pos;
 }
 
@@ -301,11 +299,11 @@ static void close (int fd ) {
   if (file == NULL) {
     exit(-1);
   }
-  try_acquiring_filesys();
+  lock_acquire(&lock_filesys);
   list_remove(&file->file_elem);
   file_close(file->file);
   free(file);
-  try_releasing_filesys();
+  lock_release(&lock_filesys);
 }
 
 static int write (int fd, const void *buffer, unsigned length) {
@@ -330,43 +328,17 @@ static int write (int fd, const void *buffer, unsigned length) {
     if (f == NULL) {
       return -1;
     }
-    try_acquiring_filesys();
-    length_write = file_write(f->file, buffer, length);
-    try_releasing_filesys();
-  }
-  return length_write;
-}
-
-//should we make argument to this function void* or const char *?
-// static void check_fp_valid(void* file) {
-//   //check if pointer to file passed in is valid
-//   if ((file) || (!is_vaddr(file))) {
-//     exit(-1);
-//   }
-//   if (!pagedir_get_page(thread_current()->pagedir, file)) {
-//     free(file);
-//     exit(-1);
-//   }
-// }
-
-static void try_acquiring_filesys() {
-  if (lock_filesys.holder != thread_current()) {
     lock_acquire(&lock_filesys);
-  }
-}
-
-static void try_releasing_filesys() {
-  if (lock_filesys.holder == thread_current()) {
+    length_write = file_write(f->file, buffer, length);
     lock_release(&lock_filesys);
   }
+  return length_write;
 }
 
 static int get_next_fd() {
   static int next_fd = 2;
   int fd;
-  try_acquiring_filesys();
   fd = next_fd++;
-  try_releasing_filesys();
   return fd;
 }
 

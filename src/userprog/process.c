@@ -98,6 +98,7 @@ start_process (void *file_name_)
   if (argv != NULL) {
     for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
       length += sizeof(token);
+      // Checks whether the pointers have left the page   
       if (length > 4000 ) {
         sema_up(&thread_current()->sema_execute);
         thread_exit();
