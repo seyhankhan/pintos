@@ -19,18 +19,40 @@
 #include "devices/input.h"
 
 #define MAX_SYSCALLS 21
+
+typedef int pid_t;
+
 static void syscall_handler (struct intr_frame *);
-void read_args(void* esp, int num_args, void **args);
-void try_acquiring_filesys(void);
-void try_releasing_filesys(void);
+static void try_acquiring_filesys(void);
+static void try_releasing_filesys(void);
 bool is_vaddr(const void *uaddr);
 static void *syscall_handlers[MAX_SYSCALLS];
+
+static void halt(void); 
+static void exit (int status);
+static pid_t exec (const char *file);
+static int wait (pid_t pid);
+static bool create (const char *file, unsigned initial_size);
+static bool remove (const char *file);
+static int open (const char *file);
+static int filesize (int fd);
+static int read (int fd, void *buffer, unsigned length);
+static int write (int fd, const void *buffer, unsigned length);
+static void seek (int fd, unsigned position);
+static unsigned tell (int fd);
+static void close (int fd);
+
+struct file_wrapper {
+    struct file *file;
+    struct list_elem file_elem;
+    int fd;
+};
 
 static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
 
 //should we make argument to this function void* or const char *?
-void check_fp_valid(void *file);
+static void check_fp_valid(void *file);
 struct lock lock_filesys;
 
 void
@@ -84,11 +106,11 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 }
 
-void halt(void) {
+static void halt(void) {
   shutdown_power_off();
 }
 
-void exit (int status) {
+static void exit (int status) {
   struct thread *cur = thread_current();
   lock_acquire(&cur->exit_status->lock);
   cur->exit_status->exit_code = status;
@@ -97,7 +119,7 @@ void exit (int status) {
   thread_exit();
 }
 
-pid_t exec (const char *file) {
+static pid_t exec (const char *file) {
   // check_fp_valid((char *) file);
 
   pid_t pid = -1;
@@ -126,11 +148,11 @@ pid_t exec (const char *file) {
   return pid;
 }
 
-int wait (pid_t pid) {
+static int wait (pid_t pid) {
   return process_wait(pid);
 }
 
-bool create (const char *file, unsigned initial_size) {
+static bool create (const char *file, unsigned initial_size) {
   if (file == NULL || !is_vaddr(file)) {
     exit(-1);
   }
@@ -146,7 +168,7 @@ bool create (const char *file, unsigned initial_size) {
   Returns a nonnegative integer handle called a “file descriptor” (fd), 
   or -1 if the file could not be opened.*/
 
-int open (const char *file) {
+static int open (const char *file) {
   if (!is_vaddr(file)) {
     exit(-1);
   }
@@ -181,7 +203,7 @@ int open (const char *file) {
 }
 
 
-bool remove (const char *file) {
+static bool remove (const char *file) {
   check_fp_valid((char *) file);
   // check if filename is empty, in which case can't remove
   if (!strcmp(file, "")) {
@@ -194,7 +216,7 @@ bool remove (const char *file) {
 }
 
 
-int filesize (int fd UNUSED) {
+static int filesize (int fd UNUSED) {
   return 0;
 }
 
@@ -227,7 +249,7 @@ int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
   return length_read;
 }
 
-void seek (int fd, unsigned position) {
+static void seek (int fd UNUSED, unsigned position UNUSED) {
   struct file_wrapper *file;
   file = get_file_by_fd(fd);
   if (file == NULL) {
@@ -238,7 +260,7 @@ void seek (int fd, unsigned position) {
   try_releasing_filesys();
 }
 
-unsigned tell (int fd UNUSED) {
+static unsigned tell (int fd UNUSED) {
   struct file_wrapper *file;
   unsigned pos;
   file = get_file_by_fd(fd);
@@ -251,7 +273,7 @@ unsigned tell (int fd UNUSED) {
   return pos;
 }
 
-void close (int fd UNUSED) {
+static void close (int fd UNUSED) {
   struct file_wrapper *file;
   try_acquiring_filesys();
   file = get_file_by_fd(fd);
@@ -264,7 +286,7 @@ void close (int fd UNUSED) {
   try_releasing_filesys();
 }
 
-int write (int fd, const void *buffer, unsigned length) {
+static int write (int fd, const void *buffer, unsigned length) {
   // If no bytes have been written return default of 0
   int length_write = 0;
   if (!is_vaddr(buffer) || !is_vaddr(buffer + length)) {
@@ -295,7 +317,7 @@ int write (int fd, const void *buffer, unsigned length) {
 }
 
 //should we make argument to this function void* or const char *?
-void check_fp_valid(void* file) {
+static void check_fp_valid(void* file) {
   //check if pointer to file passed in is valid
   if ((file) || (!is_vaddr(file))) {
     exit(-1);
@@ -306,19 +328,19 @@ void check_fp_valid(void* file) {
   }
 }
 
-void try_acquiring_filesys() {
+static void try_acquiring_filesys() {
   if (lock_filesys.holder != thread_current()) {
     lock_acquire(&lock_filesys);
   }
 }
 
-void try_releasing_filesys() {
+static void try_releasing_filesys() {
   if (lock_filesys.holder != thread_current()) {
     lock_release(&lock_filesys);
   }
 }
 
-int get_next_fd() {
+static int get_next_fd() {
   static int next_fd = 2;
   int fd;
   try_acquiring_filesys();
