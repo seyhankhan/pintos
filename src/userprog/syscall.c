@@ -52,7 +52,7 @@ static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
 
 //should we make argument to this function void* or const char *?
-static void check_fp_valid(void *file);
+// static void check_fp_valid(void *file);
 static struct lock lock_filesys;
 
 void
@@ -207,12 +207,16 @@ static int open (const char *file) {
 
 
 static bool remove (const char *file) {
-  check_fp_valid((char *) file);
+  // check_fp_valid((char *) file);
+  
   // check if filename is empty, in which case can't remove
-  if (!strcmp(file, "")) {
-    return false;
-  }
   try_acquiring_filesys();
+  struct file *f = filesys_open(file);
+  if (f == NULL) {
+    exit(-1);
+  } else {
+    file_close(f);
+  }
   bool deleted_file = filesys_remove(file);
   try_releasing_filesys();
   return deleted_file;
@@ -327,16 +331,16 @@ static int write (int fd, const void *buffer, unsigned length) {
 }
 
 //should we make argument to this function void* or const char *?
-static void check_fp_valid(void* file) {
-  //check if pointer to file passed in is valid
-  if ((file) || (!is_vaddr(file))) {
-    exit(-1);
-  }
-  if (!pagedir_get_page(thread_current()->pagedir, file)) {
-    free(file);
-    exit(-1);
-  }
-}
+// static void check_fp_valid(void* file) {
+//   //check if pointer to file passed in is valid
+//   if ((file) || (!is_vaddr(file))) {
+//     exit(-1);
+//   }
+//   if (!pagedir_get_page(thread_current()->pagedir, file)) {
+//     free(file);
+//     exit(-1);
+//   }
+// }
 
 static void try_acquiring_filesys() {
   if (lock_filesys.holder != thread_current()) {
