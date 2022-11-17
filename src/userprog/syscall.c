@@ -112,11 +112,20 @@ static void halt(void) {
 
 static void exit (int status) {
   struct thread *cur = thread_current();
-  lock_acquire(&cur->exit_status->lock);
+  // lock_acquire(&cur->exit_status->lock);
+  if (lock_held_by_current_thread(&lock_filesys)) {
+    try_releasing_filesys();
+  }
+  // Close all opened files
+  struct list_elem *elem;
+  while (!list_empty(&thread_current()->opened_files)) {
+    elem = list_pop_front(&thread_current()->opened_files);
+    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
+    free(list_entry(elem, struct file_wrapper, file_elem));
+  }
   cur->exit_status->exit_code = status;
   cur->exit_status->exited = true;
-  lock_release(&cur->exit_status->lock);
-  // Close all opened files  
+
   thread_exit();
 }
 
@@ -128,13 +137,13 @@ static pid_t exec (const char *file) {
     return pid;
   }
   char *arg;
-  char *save_ptr, *mod_fn;
+  char *save_ptr, *file_cp;
 
-  mod_fn = palloc_get_page (0);
-  if (mod_fn == NULL)
+  file_cp = palloc_get_page (0);
+  if (file_cp == NULL)
     return pid;
-  strlcpy (mod_fn, file, PGSIZE);
-  arg = strtok_r(mod_fn," ", &save_ptr);
+  strlcpy (file_cp, file, PGSIZE);
+  arg = strtok_r(file_cp," ", &save_ptr);
 
   try_acquiring_filesys();
   struct file *f = filesys_open(arg);
@@ -145,7 +154,7 @@ static pid_t exec (const char *file) {
   }
   try_releasing_filesys();
 
-  palloc_free_page(mod_fn);
+  palloc_free_page(file_cp);
   try_acquiring_filesys();
   pid = process_execute(file);
   try_releasing_filesys();
