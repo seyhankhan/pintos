@@ -26,6 +26,7 @@ static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *
 
 #define NULL_BYTE_SIZE 1;
 
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -90,11 +91,17 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  /*Splits commandline arguments into an array of strings*/
+  /* Splits commandline arguments into an array of strings*/
   // Do a check if mem allocation was successful
   argv = palloc_get_page(0);
+  int length = 0;
   if (argv != NULL) {
     for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+      length += sizeof(token);
+      if (length > 4000 ) {
+        sema_up(&thread_current()->sema_execute);
+        thread_exit();
+      }
       argv[argc] = token;
       ++argc;
   }
@@ -145,7 +152,7 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
     // Need to keep in mind the null byte at the end of the string
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
     length += token_length;
-    if (length > 4000) {
+    if (length > 4000 ) {
       sema_up(&thread_current()->sema_execute);
       thread_exit();
     }
