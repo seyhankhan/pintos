@@ -53,7 +53,7 @@ struct file_wrapper *get_file_by_fd (int fd);
 
 //should we make argument to this function void* or const char *?
 static void check_fp_valid(void *file);
-struct lock lock_filesys;
+static struct lock lock_filesys;
 
 void
 syscall_init (void) 
@@ -135,12 +135,15 @@ static pid_t exec (const char *file) {
   strlcpy (mod_fn, file, PGSIZE);
   arg = strtok_r(mod_fn," ", &save_ptr);
 
+  try_acquiring_filesys();
   struct file *f = filesys_open(arg);
   if (f == NULL) {
     return -1;
   } else {
     file_close(f);
   }
+  try_releasing_filesys();
+
   palloc_free_page(mod_fn);
   try_acquiring_filesys();
   pid = process_execute(file);
