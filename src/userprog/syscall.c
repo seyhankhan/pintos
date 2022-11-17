@@ -16,6 +16,7 @@
 #include "lib/kernel/console.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
+#include "devices/input.h"
 
 #define MAX_SYSCALLS 21
 static void syscall_handler (struct intr_frame *);
@@ -62,7 +63,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   int system_call_number = *esp;
 
   // Check if system call is valid
-  if (system_call_number < SYS_HALT || system_call_number > SYS_INUMBER)
+  if (system_call_number < SYS_HALT || system_call_number > MAX_SYSCALLS)
     exit (-1);
 
   // Generic Function wrapper
@@ -198,10 +199,35 @@ int filesize (int fd UNUSED) {
 }
 
 int read (int fd UNUSED, void *buffer UNUSED, unsigned length UNUSED) {
-  return 0;
+  int length_read = 0;
+  // Check to see if the addresses from where we are reading up until the end 
+  // are valid, ottherwise exit with status code -1
+  if (!is_vaddr(buffer) || !is_vaddr(buffer + length)) {
+    exit(-1);
+  } 
+  if (fd == STDOUT_FILENO) {
+    return -1;
+  }
+  if (fd == STDIN_FILENO) {
+    for (int i= 0; i < (int) length; i++) {
+      *(uint8_t*) buffer = input_getc();
+      (buffer)++;
+    return length;
+    }
+  } else {
+    struct file_wrapper *f = get_file_by_fd(fd);
+    if (f == NULL) {
+      return -1;
+    }
+    try_acquiring_filesys();
+    length_read = file_read(f->file, buffer, length);
+    try_releasing_filesys();
+  }
+  // printf("returning with length %i\n", length_read);
+  return length_read;
 }
 
-void seek (int fd UNUSED, unsigned position UNUSED) {
+void seek (int fd, unsigned position) {
   struct file_wrapper *file;
   file = get_file_by_fd(fd);
   if (file == NULL) {
@@ -240,7 +266,10 @@ void close (int fd UNUSED) {
 
 int write (int fd, const void *buffer, unsigned length) {
   // If no bytes have been written return default of 0
-  int ret = 0;
+  int length_write = 0;
+  if (!is_vaddr(buffer) || !is_vaddr(buffer + length)) {
+    exit(-1);
+  } 
   if (fd == STDIN_FILENO) {
     return 0;
   }
@@ -251,10 +280,18 @@ int write (int fd, const void *buffer, unsigned length) {
     is less than size because some were not able to be written. 
     */
     putbuf(buffer, length);
-    ret = length;
-  } 
+    length_write = length;
+  } else {
+    struct file_wrapper *f = get_file_by_fd(fd);
+    if (f == NULL) {
+      return -1;
+    }
+    try_acquiring_filesys();
+    length_write = file_write(f->file, buffer, length);
+    try_releasing_filesys();
+  }
   // TODO: Writing to an actual file
-  return ret;
+  return length_write;
 }
 
 //should we make argument to this function void* or const char *?
@@ -304,21 +341,6 @@ get_file_by_fd (int fd)
   }
   return NULL;
 }
-
-// Taken from thread.c
-// static tid_t
-// allocate_tid (void) 
-// {
-//   static tid_t next_tid = 1;
-//   tid_t tid;
-
-//   lock_acquire (&tid_lock);
-//   tid = next_tid++;
-//   lock_release (&tid_lock);
-
-//   return tid;
-// }
-
 
 /* Validate a user's pointer to a virtual address
   must not be
