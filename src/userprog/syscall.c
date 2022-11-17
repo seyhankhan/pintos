@@ -289,11 +289,11 @@ static unsigned tell (int fd ) {
 
 static void close (int fd ) {
   struct file_wrapper *file;
-  try_acquiring_filesys();
   file = get_file_by_fd(fd);
   if (file == NULL) {
     exit(-1);
   }
+  try_acquiring_filesys();
   list_remove(&file->file_elem);
   file_close(file->file);
   free(file);
@@ -326,7 +326,6 @@ static int write (int fd, const void *buffer, unsigned length) {
     length_write = file_write(f->file, buffer, length);
     try_releasing_filesys();
   }
-  // TODO: Writing to an actual file
   return length_write;
 }
 
