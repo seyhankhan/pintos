@@ -223,7 +223,7 @@ static int filesize (int fd ) {
   }
   try_acquiring_filesys();
   int size = file_length(fw->file);
-  try_releasing_filesys()
+  try_releasing_filesys();
   return size;
 }
 
