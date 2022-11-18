@@ -26,7 +26,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our defined helper functions*/
 static void setup_user_stack(char **argv, int argc, struct intr_frame *if_);
 static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid);
-static bool push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) ;
+static bool push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr);
 static bool word_align(struct intr_frame *if_);
 static bool push_null_sentinel(struct intr_frame *if_);
 static bool push_arg_pointers(struct intr_frame *if_,int argc, void **ptr_arr);
@@ -172,11 +172,12 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   //if pid_t not in current_thread()->children return -1
-  //if child pid_t was terminated by the kernel, return -1. maybe against exited
+  //if child pid_t was terminated by the kernel, return -1.
   //if child pid_t has already been waited on return -1
   int exit_code;
   
-  struct process_exit_status *status = get_process_exit_status_from_tid(child_tid);
+  struct process_exit_status *status = 
+    get_process_exit_status_from_tid(child_tid);
   if (status == NULL) {
     return -1;
   }
@@ -542,7 +543,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       }
 
       /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
         return false; 
       }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -632,7 +633,8 @@ setup_user_stack(char **argv, int argc, struct intr_frame *if_) {
   
 }
 
-static bool push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
+static bool 
+push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
   for (int i = argc - 1; i >= 0; i--) {
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
     if_->esp = (void *) (((char*) if_->esp) - token_length);
@@ -667,7 +669,8 @@ static bool push_null_sentinel(struct intr_frame *if_) {
 }
 
 /* Pushes argument pointers in reverse order on to the stack*/
-static bool push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
+static bool 
+push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
   // Push pointers to arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     if_->esp = (((void**) if_->esp) - 1);
@@ -702,7 +705,7 @@ static int tokenise(char **argv, int argc, char *file_name) {
         token = strtok_r (NULL, " ", &save_ptr)) 
   {
     ptrs += sizeof(token);
-    // Checks whether the number of allocated pointers has exceeded the max amount
+    // Checks whether number of allocated pointers has exceeded the max amount
     // exec-over-args test
     if (ptrs > MAX_PTRS ) {
       sema_up(&thread_current()->sema_execute);
@@ -715,7 +718,8 @@ static int tokenise(char **argv, int argc, char *file_name) {
   return argc;
 }
 
-static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
+static struct 
+process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
   struct list_elem *e;
   struct process_exit_status *status;
   struct thread *cur = thread_current();
@@ -742,7 +746,7 @@ static void close_all_files() {
   }
 }
 
-//decrements the ref_count of exit_status and frees the memory if no more references exist
+// decrements exit_status->ref_count and frees exit_status if ref_count is 0
 static void dec_ref_count(struct process_exit_status *exit_status) {
   lock_acquire(&exit_status->lock);
   exit_status->ref_count--;
@@ -753,12 +757,14 @@ static void dec_ref_count(struct process_exit_status *exit_status) {
   }
 }
 
-/* Clears the list of children statuses and frees them if no references exist*/
+// Clears the list of children statuses and frees them if no references exist
 static void free_children() {
   struct thread  *cur = thread_current();
   struct process_exit_status *status;
   while(!list_empty(&cur->children_status)) {
-    status = list_entry(list_pop_front(&cur->children_status), struct process_exit_status, elem);
+    status = list_entry(list_pop_front(&cur->children_status), 
+                        struct process_exit_status, 
+                        elem);
     dec_ref_count(status);
   }
 }
