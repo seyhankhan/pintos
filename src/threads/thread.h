@@ -106,9 +106,10 @@ struct thread
     int32_t recent_cpu;                 /* Estimate of CPU time the thread has
                                            used recently. (In FP)*/
 
+#ifdef USERPROG
     struct list children_status;
     struct process_exit_status *exit_status;
-#ifdef USERPROG
+
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore sema_execute;      /* Synchronization in process_execute */

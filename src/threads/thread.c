@@ -78,7 +78,20 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+#ifdef USERPROG
 static void process_exit_status_init(struct process_exit_status *status, int pid);
+
+static void process_exit_status_init(struct process_exit_status *status, int pid) {
+  status->ref_count = 2;
+  status->exit_code = -1;
+  status->loaded = false;
+  status->child_pid = pid;
+  sema_init(&status->sema, 0);
+  lock_init(&status->lock);
+  list_push_back(&thread_current()->children_status, &status->elem);
+}
+#endif
 
 /* Helper functions*/
 
@@ -327,8 +340,12 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  #ifdef USERPROG
+
   t->exit_status = malloc(sizeof(struct process_exit_status));
   process_exit_status_init(t->exit_status, t->tid);
+
+  #endif
 
   intr_set_level (old_level);
 
@@ -340,16 +357,6 @@ thread_create (const char *name, int priority,
     thread_yield();
 
   return tid;
-}
-
-static void process_exit_status_init(struct process_exit_status *status, int pid) {
-  status->ref_count = 2;
-  status->exit_code = -1;
-  status->loaded = false;
-  status->child_pid = pid;
-  sema_init(&status->sema, 0);
-  lock_init(&status->lock);
-  list_push_back(&thread_current()->children_status, &status->elem);
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -667,7 +674,6 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (name != NULL);
 
   memset (t, 0, sizeof *t);
-  list_init (&t->children_status);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
@@ -677,6 +683,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   
   #ifdef USERPROG
+  list_init (&t->children_status);
   list_init(&t->opened_files);
   sema_init(&t->sema_execute, 0);
   #endif
