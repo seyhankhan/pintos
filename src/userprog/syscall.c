@@ -40,11 +40,6 @@ static void seek (int fd, unsigned position);
 static unsigned tell (int fd);
 static void close (int fd);
 
-struct file_wrapper {
-    struct file *file;
-    struct list_elem file_elem;
-    int fd;
-};
 
 static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
@@ -112,13 +107,6 @@ static void exit (int status) {
   // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {
     lock_release(&lock_filesys);
-  }
-  // Close all opened files
-  struct list_elem *elem;
-  while (!list_empty(&thread_current()->opened_files)) {
-    elem = list_pop_front(&thread_current()->opened_files);
-    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
-    free(list_entry(elem, struct file_wrapper, file_elem));
   }
   cur->exit_status->exit_code = status;
 

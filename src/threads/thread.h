@@ -126,6 +126,12 @@ struct thread_elem {
    struct thread *thread; /* pointer to the thread that is being stored in the list*/
 };
 
+struct file_wrapper {
+    struct file *file;
+    struct list_elem file_elem;
+    int fd;
+};
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "mlfqs". */

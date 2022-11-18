@@ -24,6 +24,12 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
 static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid);
+static bool push_strings_to_stack(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) ;
+static bool word_align(struct intr_frame *if_);
+static bool push_null_sentinel(struct intr_frame *if_);
+static bool push_arg_pointers(struct intr_frame *if_,int argc, void **ptr_arr);
+static bool push_argc(struct intr_frame *if_, int argc);
+static bool push_null_sentinel(struct intr_frame *if_);
 
 #define NULL_BYTE_SIZE 1;
 
@@ -112,11 +118,13 @@ start_process (void *file_name_)
   /* Splits commandline arguments into an array of strings*/
   // Do a check if mem allocation was successful
   argv = palloc_get_page(0);
+  void* beginning = argv;
   int length = 0;
   if (argv != NULL) {
     for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
       length += sizeof(token);
       // Checks whether the pointers have left the page   
+      // printf("Beginning : %p now: %p, difference: %d\n", beginning, argv+length, (void *)(argv+length) - beginning);
       if (length > 4000 ) {
         sema_up(&thread_current()->sema_execute);
         thread_exit();
@@ -163,11 +171,7 @@ start_process (void *file_name_)
 }
 
 
-static void
-pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
-  /* Push Arguments to the stack frame - order doesn't matter for now 
-     as they will be referenced by pointers*/
-  void *ptr_arr[argc];
+static bool push_strings_to_stack(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
   int length = 0;
   for (int i = argc - 1; i >= 0; i--) {
     // Need to keep in mind the null byte at the end of the string
@@ -184,41 +188,59 @@ pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
     // Store the pointer of the argument that was just pushed on to the stack
     ptr_arr[i] = if_->esp;
   }
+  return true;
+}
 
+static bool word_align(struct intr_frame *if_) {
   /* Round stack pointer down to a multiple of 4 before pushing pointers
       for better performance (word-aligned access)*/
   if_->esp -= (unsigned) if_->esp % 4;  
+  return true;
+}
+
+static bool push_null_sentinel(struct intr_frame *if_) {
   // decrement stack pointer by size of sentinel
   if_->esp = (((void**) if_->esp) - 1);
   // push null pointer sentinel onto stack
   *((void**)(if_->esp)) = NULL;
+  return true;
+}
 
+static bool push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
   // Push pointers to arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     if_->esp = (((void**) if_->esp) - 1);
     memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
   }
-
   // Push address of argv[0]
   void *addr_argv = if_->esp;
   //1. decrement stack pointer by size of pointer
   if_->esp = (((void**) if_->esp) - 1);
   //2. push pointer to base of argv on stack
   memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
+  return true;
+}
 
+static bool push_argc(struct intr_frame *if_, int argc) {
   /*Push argc
-    1. decrement stack pointer by size of argc
-    2. push argc to stack */
+  1. decrement stack pointer by size of argc
+  2. push argc to stack */
   if_->esp -= sizeof(argc);
   memcpy(if_->esp, &argc, sizeof(argc));
+  return true;
+}
 
-  /*Make space for fake return address, and push it (NULL), 
-    so that stack frame has same structure as any other
-    1. decrement stack pointer to the next address
-    2. push fake "return address" (null)*/
-  if_->esp = (((void**) if_->esp) - 1);
-  // memcpy doesn't work here
-  *((void**)(if_->esp)) = NULL;
+static void
+pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
+  /* Push Arguments to the stack frame - order doesn't matter for now 
+     as they will be referenced by pointers*/
+  void *ptr_arr[argc];
+  push_strings_to_stack(argv, argc, if_, ptr_arr);
+  word_align(if_);
+  push_null_sentinel(if_);
+  push_arg_pointers(if_, argc, ptr_arr);
+  push_argc(if_, argc);
+  push_null_sentinel(if_);
 }
 
 /* Waits for thread TID to die and returns its exit status. 
@@ -262,6 +284,14 @@ process_exit (void)
 
   printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   dec_ref_count(cur->exit_status);
+
+  // Close all opened files
+  struct list_elem *elem;
+  while (!list_empty(&thread_current()->opened_files)) {
+    elem = list_pop_front(&thread_current()->opened_files);
+    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
+    free(list_entry(elem, struct file_wrapper, file_elem));
+  }
 
   struct process_exit_status *status;
   while(!list_empty(&cur->children_status)) {
