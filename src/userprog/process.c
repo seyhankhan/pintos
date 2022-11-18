@@ -698,7 +698,8 @@ static bool push_argc(struct intr_frame *if_, int argc) {
 static int tokenise(char **argv, int argc, char *file_name) {
   char *token, *save_ptr;
   int ptrs = 0;
-  for (token = strtok_r (file_name," ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) 
+  for (token = strtok_r (file_name," ", &save_ptr); token != NULL; 
+        token = strtok_r (NULL, " ", &save_ptr)) 
   {
     ptrs += sizeof(token);
     // Checks whether the number of allocated pointers has exceeded the max amount
@@ -718,7 +719,9 @@ static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
   struct list_elem *e;
   struct process_exit_status *status;
   struct thread *cur = thread_current();
-  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+  for (e = list_begin(&cur->children_status);
+       e != list_end(&cur->children_status); 
+       e = list_next(e)) {
     status = list_entry(e, struct process_exit_status, elem);
     if (status->child_pid == tid) {
       return status;
