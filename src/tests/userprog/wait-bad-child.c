@@ -11,6 +11,6 @@ void
 test_main (void) 
 {
   int grandchild = wait (exec ("exec-exit"));
-  msg ("grandchild should be running by now")
+  msg ("grandchild should be running by now");
   msg ("waiting for grandchild returned: %d", wait(grandchild));
 }
