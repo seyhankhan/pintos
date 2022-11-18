@@ -15,8 +15,6 @@ struct process_exit_status {
   struct list_elem elem; //for parent thread's list of process statuses
   struct semaphore sema; //downed by process_wait and upped by process_exit to ensure a parent waits for its child
   struct lock lock;      //used for thread safe access to the shared data
-
-  //add a semaphore/lock to ensure thread safety when changing this data?
 };
 
 tid_t process_execute (const char *file_name);
