@@ -7,7 +7,7 @@ check_expected (IGNORE_EXIT_CODES => 1, [<<'EOF']);
 (exec-exit) run
 (child-simple) run
 (wait-bad-child) grandchild should be running by now
-(wait-bad-child) waiting for grandchild returned -1
+(wait-bad-child) waiting for grandchild returned: -1
 (wait-bad-child) end
 EOF
 pass;

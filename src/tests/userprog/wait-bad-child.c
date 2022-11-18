@@ -1,3 +1,6 @@
+/* Waits for an indirect child process (grandchild).  
+   This must fail, returning -1 from wait. */
+
 /* Wait for a subprocess to finish. */
 
 #include <syscall.h>
@@ -7,7 +10,7 @@
 void
 test_main (void) 
 {
-  int pid = wait (exec ("exec-exit"));
+  int grandchild = wait (exec ("exec-exit"));
   msg ("grandchild should be running by now")
-  msg ("waiting for grandchild returned %d", wait(pid));
+  msg ("waiting for grandchild returned: %d", wait(grandchild));
 }
