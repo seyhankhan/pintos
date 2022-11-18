@@ -22,7 +22,6 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
-//decrements the ref_count of exit_status and frees the memory if no more references exist
-void dec_ref_count(struct process_exit_status *exit_status);
+
 
 #endif /* userprog/process.h */

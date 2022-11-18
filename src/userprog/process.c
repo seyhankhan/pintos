@@ -22,35 +22,30 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
+
+/* Our defined helper functions*/
+static void setup_user_stack(char **argv, int argc, struct intr_frame *if_);
 static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid);
-static bool push_strings_to_stack(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) ;
+static bool push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) ;
 static bool word_align(struct intr_frame *if_);
 static bool push_null_sentinel(struct intr_frame *if_);
 static bool push_arg_pointers(struct intr_frame *if_,int argc, void **ptr_arr);
 static bool push_argc(struct intr_frame *if_, int argc);
 static bool push_null_sentinel(struct intr_frame *if_);
+static int tokenise(char **argv, int argc, char *file_name);
+static void close_all_files(void);
+static void free_children(void);
+static void dec_ref_count(struct process_exit_status *exit_status);
 
-#define NULL_BYTE_SIZE 1;
-
+/* Definitions*/
+#define NULL_BYTE_SIZE 1
+#define MAX_PTRS 4000
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-   
-static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
-  struct list_elem *e;
-  struct process_exit_status *status;
-  struct thread *cur = thread_current();
-  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
-    status = list_entry(e, struct process_exit_status, elem);
-    if (status->child_pid == tid) {
-      return status;
-    }
-  }
-  return NULL;
-}
+  
 
 tid_t
 process_execute (const char *file_name) 
@@ -85,7 +80,8 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
   }
-  // Sema down on the thread that was just created
+
+  // If thread was sucessfully created allow it to run and block main
   if (tid != TID_ERROR) {
     sema_down(&get_thread_by_tid(tid)->sema_execute);
     struct process_exit_status *status = get_process_exit_status_from_tid(tid);
@@ -97,6 +93,8 @@ process_execute (const char *file_name)
   return tid;
 }
 
+
+
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -106,7 +104,7 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-  char *token, *save_ptr, **argv;
+  char **argv;
   int argc = 0;
 
   /* Initialize interrupt frame and load executable. */
@@ -116,31 +114,21 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   /* Splits commandline arguments into an array of strings*/
-  // Do a check if mem allocation was successful
+  // If memory allocation failed exit
   argv = palloc_get_page(0);
-  void* beginning = argv;
-  int length = 0;
-  if (argv != NULL) {
-    for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-      length += sizeof(token);
-      // Checks whether the pointers have left the page   
-      // printf("Beginning : %p now: %p, difference: %d\n", beginning, argv+length, (void *)(argv+length) - beginning);
-      if (length > 4000 ) {
-        sema_up(&thread_current()->sema_execute);
-        thread_exit();
-      }
-      argv[argc] = token;
-      ++argc;
+  if (argv == NULL) 
+  {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
   }
-  argv[argc] = (char *) 0;
 
+  // Tokenises the arguments into argv and returns argc
+  argc = tokenise(argv, argc, file_name);
   success = load (argv[0], &if_.eip, &if_.esp);
 
-
-  if(success){
-    pass_args_and_setup_stack(argv, argc, &if_);
-    // If file currently running, deny write to executable
-    // Lock file system and release lock
+  if(success)
+  {
+    setup_user_stack(argv, argc, &if_);
     struct file *file = filesys_open(file_name);
     curr->exec_file = file;
     file_deny_write(file);
@@ -149,15 +137,16 @@ start_process (void *file_name_)
     curr->exit_status->loaded = true;
     sema_up (&curr->sema_execute);  
   } 
-  else {
+  else 
+  {
     curr->exit_status->exit_code = -1;
     curr->exit_status->loaded = false;
     /* If load failed, quit. */
     // If failed free argv too
     sema_up (&curr->sema_execute); 
     thread_exit();
-    } 
-  }
+  } 
+  
   palloc_free_page (file_name);
 
   /* Start the user process by simulating a return from an
@@ -168,79 +157,6 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
-}
-
-
-static bool push_strings_to_stack(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
-  int length = 0;
-  for (int i = argc - 1; i >= 0; i--) {
-    // Need to keep in mind the null byte at the end of the string
-    size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
-    length += token_length;
-    if (length > 4000 ) {
-      sema_up(&thread_current()->sema_execute);
-      thread_exit();
-    }
-    // Decrement stackpointer to fit length of string + null byte
-    if_->esp = (void *) (((char*) if_->esp) - token_length);
-    // Note: strlcpy automatically ends token with null byte so no need to append
-    strlcpy ((char*)if_->esp, argv[i], token_length);
-    // Store the pointer of the argument that was just pushed on to the stack
-    ptr_arr[i] = if_->esp;
-  }
-  return true;
-}
-
-static bool word_align(struct intr_frame *if_) {
-  /* Round stack pointer down to a multiple of 4 before pushing pointers
-      for better performance (word-aligned access)*/
-  if_->esp -= (unsigned) if_->esp % 4;  
-  return true;
-}
-
-static bool push_null_sentinel(struct intr_frame *if_) {
-  // decrement stack pointer by size of sentinel
-  if_->esp = (((void**) if_->esp) - 1);
-  // push null pointer sentinel onto stack
-  *((void**)(if_->esp)) = NULL;
-  return true;
-}
-
-static bool push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
-  // Push pointers to arguments in reverse order
-  for (int i = argc - 1; i >= 0; i--) {
-    if_->esp = (((void**) if_->esp) - 1);
-    memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
-  }
-  // Push address of argv[0]
-  void *addr_argv = if_->esp;
-  //1. decrement stack pointer by size of pointer
-  if_->esp = (((void**) if_->esp) - 1);
-  //2. push pointer to base of argv on stack
-  memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
-  return true;
-}
-
-static bool push_argc(struct intr_frame *if_, int argc) {
-  /*Push argc
-  1. decrement stack pointer by size of argc
-  2. push argc to stack */
-  if_->esp -= sizeof(argc);
-  memcpy(if_->esp, &argc, sizeof(argc));
-  return true;
-}
-
-static void
-pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_) {
-  /* Push Arguments to the stack frame - order doesn't matter for now 
-     as they will be referenced by pointers*/
-  void *ptr_arr[argc];
-  push_strings_to_stack(argv, argc, if_, ptr_arr);
-  word_align(if_);
-  push_null_sentinel(if_);
-  push_arg_pointers(if_, argc, ptr_arr);
-  push_argc(if_, argc);
-  push_null_sentinel(if_);
 }
 
 /* Waits for thread TID to die and returns its exit status. 
@@ -275,6 +191,7 @@ process_wait (tid_t child_tid UNUSED)
   return exit_code;
 }
 
+
 /* Free the current process's resources. */
 void
 process_exit (void)
@@ -285,19 +202,11 @@ process_exit (void)
   printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   dec_ref_count(cur->exit_status);
 
-  // Close all opened files
-  struct list_elem *elem;
-  while (!list_empty(&thread_current()->opened_files)) {
-    elem = list_pop_front(&thread_current()->opened_files);
-    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
-    free(list_entry(elem, struct file_wrapper, file_elem));
-  }
+  // Closes all opened files
+  close_all_files();
+  // Remove children and free the memory
+  free_children();
 
-  struct process_exit_status *status;
-  while(!list_empty(&cur->children_status)) {
-    status = list_entry(list_pop_front(&cur->children_status), struct process_exit_status, elem);
-    dec_ref_count(status);
-  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -321,16 +230,6 @@ process_exit (void)
   }
   
   sema_up(&cur->exit_status->sema);
-}
-
-void dec_ref_count(struct process_exit_status *exit_status) {
-  lock_acquire(&exit_status->lock);
-  exit_status->ref_count--;
-  if (exit_status->ref_count == 0) {
-    free(exit_status);
-  } else {
-    lock_release(&exit_status->lock);
-  }
 }
 
 
@@ -669,7 +568,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
@@ -694,4 +593,169 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* Helper Functions*/
+
+
+/* Setting up stack helper functions*/
+
+static void
+setup_user_stack(char **argv, int argc, struct intr_frame *if_) {
+  /* Push Arguments to the stack frame - order doesn't matter for now 
+     as they will be referenced by pointers*/
+  void *ptr_arr[argc];
+  if (!push_strings(argv, argc, if_, ptr_arr)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }
+  if (!word_align(if_)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }
+  if (!push_null_sentinel(if_)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }
+  if (!push_arg_pointers(if_, argc, ptr_arr)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }
+  if (!push_argc(if_, argc)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }
+  if (!push_null_sentinel(if_)) {
+    sema_up(&thread_current()->sema_execute);
+    thread_exit();
+  }  
+  
+}
+
+static bool push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
+  for (int i = argc - 1; i >= 0; i--) {
+    size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
+    if_->esp = (void *) (((char*) if_->esp) - token_length);
+    if (PHYS_BASE - if_->esp > PGSIZE) {
+      return false;
+    }
+    strlcpy ((char*)if_->esp, argv[i], token_length);
+    // Store the pointer of the argument that was just pushed on to the stack
+    ptr_arr[i] = if_->esp;
+  }
+  return true;
+}
+
+/* Round stack pointer down to a multiple of 4 before pushing pointers
+    for better performance (word-aligned access)*/
+static bool word_align(struct intr_frame *if_) {
+
+  if_->esp -= (unsigned) if_->esp % 4;  
+  if (PHYS_BASE - if_->esp > PGSIZE) 
+      return false;
+  return true;
+}
+
+/* Pushes Null sentinel on to stack*/
+static bool push_null_sentinel(struct intr_frame *if_) {
+  // decrement stack pointer by size of sentinel
+  if_->esp = (((void**) if_->esp) - 1);
+  if (PHYS_BASE - if_->esp > PGSIZE) 
+    return false;
+  *((void**)(if_->esp)) = NULL;
+  return true;
+}
+
+/* Pushes argument pointers in reverse order on to the stack*/
+static bool push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
+  // Push pointers to arguments in reverse order
+  for (int i = argc - 1; i >= 0; i--) {
+    if_->esp = (((void**) if_->esp) - 1);
+    if (PHYS_BASE - if_->esp > PGSIZE) 
+      return false;
+    memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
+  }
+  // Push address of argv[0]
+  void *addr_argv = if_->esp;
+  if_->esp = (((void**) if_->esp) - 1);
+  if (PHYS_BASE - if_->esp > PGSIZE) 
+    return false;
+  memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
+  return true;
+}
+
+/* Pushes argc to the stack*/
+static bool push_argc(struct intr_frame *if_, int argc) {
+  if_->esp -= sizeof(argc);
+  if (PHYS_BASE - if_->esp > PGSIZE) 
+    return false;
+  memcpy(if_->esp, &argc, sizeof(argc));
+  return true;
+}
+
+/* Tokenises the arguments and returns argc*/
+
+static int tokenise(char **argv, int argc, char *file_name) {
+  char *token, *save_ptr;
+  int ptrs = 0;
+  for (token = strtok_r (file_name," ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) 
+  {
+    ptrs += sizeof(token);
+    // Checks whether the number of allocated pointers has exceeded the max amount
+    // exec-over-args test
+    if (ptrs > MAX_PTRS ) {
+      sema_up(&thread_current()->sema_execute);
+      thread_exit();
+    }
+    argv[argc] = token;
+    ++argc;
+  }
+  argv[argc] = (char *) 0;
+  return argc;
+}
+
+static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
+  struct list_elem *e;
+  struct process_exit_status *status;
+  struct thread *cur = thread_current();
+  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    status = list_entry(e, struct process_exit_status, elem);
+    if (status->child_pid == tid) {
+      return status;
+    }
+  }
+  return NULL;
+}
+
+/* Process_exit and process_wait and process_execute helpers*/
+ 
+static void close_all_files() {
+  // Close all opened files
+  struct list_elem *elem;
+  while (!list_empty(&thread_current()->opened_files)) {
+    elem = list_pop_front(&thread_current()->opened_files);
+    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
+    free(list_entry(elem, struct file_wrapper, file_elem));
+  }
+}
+
+//decrements the ref_count of exit_status and frees the memory if no more references exist
+static void dec_ref_count(struct process_exit_status *exit_status) {
+  lock_acquire(&exit_status->lock);
+  exit_status->ref_count--;
+  if (exit_status->ref_count == 0) {
+    free(exit_status);
+  } else {
+    lock_release(&exit_status->lock);
+  }
+}
+
+/* Clears the list of children statuses and frees them if no references exist*/
+static void free_children() {
+  struct thread  *cur = thread_current();
+  struct process_exit_status *status;
+  while(!list_empty(&cur->children_status)) {
+    status = list_entry(list_pop_front(&cur->children_status), struct process_exit_status, elem);
+    dec_ref_count(status);
+  }
 }
