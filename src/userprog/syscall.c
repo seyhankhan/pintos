@@ -131,26 +131,7 @@ static pid_t exec (const char *file) {
   if (!is_vaddr(file)) {
     return pid;
   }
-  char *arg;
-  char *save_ptr, *file_cp;
-
-  // Is freed at the end of this function
-  file_cp = palloc_get_page (0);
-  if (file_cp == NULL)
-    return pid;
-  strlcpy (file_cp, file, PGSIZE);
-  arg = strtok_r(file_cp," ", &save_ptr);
-
-  lock_acquire(&lock_filesys);
-  struct file *f = filesys_open(arg);
-  if (f == NULL) {
-    return pid;
-  } else {
-    file_close(f);
-  }
-  lock_release(&lock_filesys);
-
-  palloc_free_page(file_cp);
+  
   lock_acquire(&lock_filesys);
   pid = process_execute(file);
   lock_release(&lock_filesys);

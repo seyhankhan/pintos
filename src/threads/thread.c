@@ -346,6 +346,7 @@ static void process_exit_status_init(struct process_exit_status *status, int pid
   status->ref_count = 2;
   status->exit_code = -1;
   status->exited = false;
+  status->loaded = false;
   status->child_pid = pid;
   sema_init(&status->sema, 0);
   lock_init(&status->lock);

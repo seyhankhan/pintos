@@ -23,6 +23,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
+static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid);
 
 #define NULL_BYTE_SIZE 1;
 
@@ -31,6 +32,20 @@ static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+   
+static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid) {
+  struct list_elem *e;
+  struct process_exit_status *status;
+  struct thread *cur = thread_current();
+  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
+    status = list_entry(e, struct process_exit_status, elem);
+    if (status->child_pid == tid) {
+      return status;
+    }
+  }
+  return NULL;
+}
+
 tid_t
 process_execute (const char *file_name) 
 {
@@ -67,8 +82,11 @@ process_execute (const char *file_name)
   // Sema down on the thread that was just created
   if (tid != TID_ERROR) {
     sema_down(&get_thread_by_tid(tid)->sema_execute);
+    struct process_exit_status *status = get_process_exit_status_from_tid(tid);
+    if (status == NULL || !status->loaded) {
+      return TID_ERROR;
+    }
   }
-  
 
   return tid;
 }
@@ -120,14 +138,16 @@ start_process (void *file_name_)
     file_deny_write(file);
     // Free up memory
     palloc_free_page(argv);
+    curr->exit_status->loaded = true;
     sema_up (&curr->sema_execute);  
   } 
   else {
     curr->exit_status->exit_code = -1;
+    curr->exit_status->loaded = false;
     /* If load failed, quit. */
     // If failed free argv too
-    palloc_free_page(argv);   
     sema_up (&curr->sema_execute); 
+    thread_exit();
     } 
   }
   palloc_free_page (file_name);
@@ -216,16 +236,9 @@ process_wait (tid_t child_tid UNUSED)
   //if pid_t not in current_thread()->children return -1
   //if child pid_t was terminated by the kernel, return -1. maybe against exited
   //if child pid_t has already been waited on return -1
-  struct thread *cur = thread_current();
   int exit_code;
-  struct list_elem *e;
-  struct process_exit_status *status = NULL;
-  for (e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
-    status = list_entry(e, struct process_exit_status, elem);
-    if (status->child_pid == child_tid) {
-      break;
-    }
-  }
+  
+  struct process_exit_status *status = get_process_exit_status_from_tid(child_tid);
   if (status == NULL) {
     return -1;
   }
@@ -251,10 +264,9 @@ process_exit (void)
   dec_ref_count(cur->exit_status);
 
   struct process_exit_status *status;
-  for (struct list_elem *e = list_begin(&cur->children_status); e != list_end(&cur->children_status); e = list_next(e)) {
-    status = list_entry(e, struct process_exit_status, elem);
+  while(!list_empty(&cur->children_status)) {
+    status = list_entry(list_pop_front(&cur->children_status), struct process_exit_status, elem);
     dec_ref_count(status);
-    list_remove(e);
   }
 
   /* Destroy the current process's page directory and switch back

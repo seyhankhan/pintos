@@ -11,6 +11,7 @@ struct process_exit_status {
   int ref_count; //keeps track of parent and child being alive to determine when to allocate parent&child
   int child_pid; 
   bool exited; //parent&child
+  bool loaded; //process loaded correctly? parent&child
   //int parent_pid maybe neccesary
   struct list_elem elem; //for parent threads list of process
   struct semaphore sema;
