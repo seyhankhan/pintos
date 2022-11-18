@@ -231,12 +231,8 @@ lock_acquire (struct lock *lock)
       thread_update_effective_priority(lock->holder);
     }
   }
-  
-  intr_set_level(old_level);
 
   sema_down (&lock->semaphore);
-
-  old_level = intr_disable();
 
   lock->holder = elem.thread;
   lock->holder->lock_waiting = NULL;
@@ -307,9 +303,9 @@ lock_release (struct lock *lock)
   }
 
   lock->holder = NULL;
-  intr_set_level(old_level);
 
   sema_up (&lock->semaphore);
+  intr_set_level(old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
