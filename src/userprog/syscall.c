@@ -121,7 +121,6 @@ static void exit (int status) {
     free(list_entry(elem, struct file_wrapper, file_elem));
   }
   cur->exit_status->exit_code = status;
-  cur->exit_status->exited = true;
 
   thread_exit();
 }
@@ -131,7 +130,7 @@ static pid_t exec (const char *file) {
   if (!is_vaddr(file)) {
     return pid;
   }
-  
+
   lock_acquire(&lock_filesys);
   pid = process_execute(file);
   lock_release(&lock_filesys);
