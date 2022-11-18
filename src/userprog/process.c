@@ -24,6 +24,12 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void pass_args_and_setup_stack(char **argv, int argc, struct intr_frame *if_);
 static struct process_exit_status *get_process_exit_status_from_tid(tid_t tid);
+static bool push_strings_to_stack(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) ;
+static bool word_align(struct intr_frame *if_);
+static bool push_null_sentinel(struct intr_frame *if_);
+static bool push_arg_pointers(struct intr_frame *if_,int argc, void **ptr_arr);
+static bool push_argc(struct intr_frame *if_, int argc);
+static bool push_null_sentinel(struct intr_frame *if_);
 
 #define NULL_BYTE_SIZE 1;
 
@@ -112,11 +118,13 @@ start_process (void *file_name_)
   /* Splits commandline arguments into an array of strings*/
   // Do a check if mem allocation was successful
   argv = palloc_get_page(0);
+  void* beginning = argv;
   int length = 0;
   if (argv != NULL) {
     for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
       length += sizeof(token);
       // Checks whether the pointers have left the page   
+      // printf("Beginning : %p now: %p, difference: %d\n", beginning, argv+length, (void *)(argv+length) - beginning);
       if (length > 4000 ) {
         sema_up(&thread_current()->sema_execute);
         thread_exit();
@@ -276,6 +284,14 @@ process_exit (void)
 
   printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   dec_ref_count(cur->exit_status);
+
+  // Close all opened files
+  struct list_elem *elem;
+  while (!list_empty(&thread_current()->opened_files)) {
+    elem = list_pop_front(&thread_current()->opened_files);
+    file_close(list_entry(elem, struct file_wrapper, file_elem)->file);
+    free(list_entry(elem, struct file_wrapper, file_elem));
+  }
 
   struct process_exit_status *status;
   while(!list_empty(&cur->children_status)) {
