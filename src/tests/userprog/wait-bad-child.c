@@ -1,8 +1,6 @@
 /* Waits for an indirect child process (grandchild).  
    This must fail, returning -1 from wait. */
 
-/* Wait for a subprocess to finish. */
-
 #include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
