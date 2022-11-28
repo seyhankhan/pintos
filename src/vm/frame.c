@@ -34,3 +34,20 @@ void release_page_from_frame(struct frame* frame) {
     frame->page = NULL;
 }
 
+void free_frame_table(struct page* page) {
+    if (!page) {
+        return;
+    }
+    int i;
+    for (i = 0; i < curr_frames; i++) {
+        lock_acquire(&lock_on_frame_table);
+        if (frame_table[i] && frame_table[i]->page == page) {
+            free(frame_table[i]);
+            lock_release(&lock_on_frame_table);
+            return;
+        }
+        lock_release(&lock_on_frame_table);
+    }
+
+}
+
