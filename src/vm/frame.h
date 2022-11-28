@@ -10,5 +10,6 @@ struct frame {
 };
 
 void initialise_frame(int num_frames);
+void release_page_from_frame(struct frame* frame);
 
 #endif

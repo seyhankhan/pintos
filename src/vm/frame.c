@@ -25,5 +25,12 @@ void initialise_frame(int num_frames) {
         curr_frames++;
     }
     lock_init(&lock_on_frame_table);
-
 }
+
+void release_page_from_frame(struct frame* frame) {
+    if (!frame) {
+        return;
+    }
+    frame->page = NULL;
+}
+
