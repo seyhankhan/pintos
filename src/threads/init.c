@@ -37,6 +37,10 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#ifndef VM
+#include "vm/frame.h"
+#endif
+
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -89,6 +93,7 @@ main (void)
      then enable console locking. */
   thread_init ();
   console_init ();  
+  initialise_frame(user_page_limit);
 
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
