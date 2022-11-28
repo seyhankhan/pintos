@@ -51,3 +51,22 @@ void free_frame_table(struct page* page) {
 
 }
 
+void allocate_page_to_frame(struct page* page) {
+    if (!page) {
+        return;
+    }
+    int i;
+    for (i = 0; i < curr_frames; i++) {
+        lock_acquire(&lock_on_frame_table);
+        if (frame_table[i]->page == NULL) {
+            struct frame* frame = malloc(sizeof(struct frame*));
+            frame->page = page;
+            lock_release(&lock_on_frame_table);
+            return frame_table;
+        }
+        lock_release(&lock_on_frame_table);
+    }
+    return;
+    // this is where we implement page eviction process later
+}
+
