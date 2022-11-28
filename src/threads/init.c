@@ -37,8 +37,8 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
-#ifndef VM
-#include "vm/frame.h"
+#ifdef VM
+#include "../vm/frame.h"
 #endif
 
 
@@ -93,7 +93,6 @@ main (void)
      then enable console locking. */
   thread_init ();
   console_init ();  
-  initialise_frame(user_page_limit);
 
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
@@ -132,6 +131,9 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
+#ifdef VM
+  initialise_frame(init_ram_pages);
+#endif
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

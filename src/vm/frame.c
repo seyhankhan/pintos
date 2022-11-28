@@ -3,6 +3,7 @@
 #include "vm/frame.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 
 static size_t curr_frames;
 static struct lock lock_on_frame_table;
