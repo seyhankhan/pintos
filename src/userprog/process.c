@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -57,7 +58,8 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   // Freed at the end of this function
-  fn_copy = palloc_get_page (0);
+  fn_copy = palloc_get_page (PAL_USER);
+
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
@@ -115,7 +117,8 @@ start_process (void *file_name_)
 
   /* Splits commandline arguments into an array of strings*/
   // If memory allocation failed exit
-  argv = palloc_get_page(0);
+  argv = palloc_get_page(PAL_USER);
+  
   if (argv == NULL) 
   {
     sema_up(&thread_current()->sema_execute);
@@ -575,6 +578,7 @@ setup_stack (void **esp)
     }
   return success;
 }
+
 
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.

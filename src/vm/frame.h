@@ -12,5 +12,7 @@ struct frame {
 
 void initialise_frame(int num_frames);
 void release_page_from_frame(struct frame* frame);
+struct frame* allocate_page_to_frame(struct page* page);
+void free_frame_table(struct page* page);
 
 #endif
