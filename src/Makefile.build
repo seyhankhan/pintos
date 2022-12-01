@@ -69,7 +69,10 @@ vm_SRC += vm/mmap.c				# Memory map table
 
 # Virtual memory code.
 vm_SRC += devices/swap.c		# Swap block manager.
-#vm_SRC = vm/file.c			# Some other file.
+vm_SRC += vm/frame.c
+vm_SRC += vm/mmap.c
+vm_SRC += vm/page.c
+vm_SRC += vm/swap.c
 
 # Filesystem code.
 filesys_SRC  = filesys/filesys.c	# Filesystem core.
