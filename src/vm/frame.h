@@ -6,13 +6,11 @@
 #include "vm/page.h"
 
 struct frame {
-    struct page* page;          // pointer to page (if any) occupying frame
-    struct lock lock;           // allows synchronisation of frame processes 
-    void* addr;                 // frame page address
-    struct hash_elem hash_elem; // hash entry for frame table
-
+    struct thread *thread;          // thread that owns frame 
+    struct lock lock                // allows synchronisation of frame processes 
+    void *page;                     // pointer to page occupying frame
+    struct hash_elem hash_elem;     // hash entry for frame table
+    void *addr;                     // address of the frame's page
 };
-
-
 
 #endif
