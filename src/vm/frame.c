@@ -30,6 +30,8 @@ void initialise_frame() {
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);
 }
 
+//add page to frame table
+//returns true on success
 static bool insert_page_into_frame(void *page_to_insert) {
 
   struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
@@ -42,5 +44,30 @@ static bool insert_page_into_frame(void *page_to_insert) {
   frame->page = page_to_insert;
   frame->thread = thread_current ();
 
+  return true;
+}
+
+//retrieve page from frame table
+static struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
+  struct frame *frame;
+  frame->page = page_to_retrieve;
+  struct hash_elem *hash_element = hash_find(&frame_table, &frame->hash_elem);
+  if (hash_element != NULL) {
+    return hash_entry(hash_element, struct frame, hash_elem);
+  }
+  return NULL;
+}
+
+//remove page from frame table
+//returns true on success
+static bool remove_page_from_frame(void *page_to_delete) {
+  struct frame *frame = retrieve_page_from_frame(page_to_delete);
+  if (frame == NULL)
+    return false;
+  lock_acquire(&lock_on_frame);
+  hash_delete(&frame_table, &frame->hash_elem);
+  free(frame);
+  lock_release(&lock_on_frame);
+  
   return true;
 }
