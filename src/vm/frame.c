@@ -29,3 +29,18 @@ void initialise_frame() {
   lock_init(&lock_on_frame);
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);
 }
+
+static bool insert_page_into_frame(void *page_to_insert) {
+
+  struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
+  if (frame == NULL) {
+    return false;
+  }  
+  lock_acquire(&lock_on_frame);
+  hash_insert(&frame_table, &frame->hash_elem);
+  lock_release(&lock_on_frame); 
+  frame->page = page_to_insert;
+  frame->thread = thread_current ();
+
+  return true;
+}
