@@ -38,7 +38,7 @@
 #include "filesys/fsutil.h"
 #endif
 #ifdef VM
-#include "../vm/frame.h"
+#include "vm/frame.h"
 #endif
 
 
@@ -132,8 +132,9 @@ main (void)
 #endif
 
 #ifdef VM
-  initialise_frame(init_ram_pages);
+  initialise_frame();
 #endif
+
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
