@@ -102,7 +102,7 @@ static void halt(void) {
   shutdown_power_off();
 }
 
-static void exit (int status) {
+static void exit(int status) {
   struct thread *cur = thread_current();
   // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {

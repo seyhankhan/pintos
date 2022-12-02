@@ -49,9 +49,9 @@ static bool insert_page_into_frame(void *page_to_insert) {
 
 //retrieve page from frame table
 static struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
-  struct frame *frame;
-  frame->page = page_to_retrieve;
-  struct hash_elem *hash_element = hash_find(&frame_table, &frame->hash_elem);
+  struct frame frame;
+  frame.page = page_to_retrieve;
+  struct hash_elem *hash_element = hash_find(&frame_table, &frame.hash_elem);
   if (hash_element != NULL) {
     return hash_entry(hash_element, struct frame, hash_elem);
   }
@@ -68,6 +68,22 @@ static bool remove_page_from_frame(void *page_to_delete) {
   hash_delete(&frame_table, &frame->hash_elem);
   free(frame);
   lock_release(&lock_on_frame);
-  
+
   return true;
+}
+
+void *obtain_free_frame(enum palloc_flags flags) {
+  void *free_page_to_obtain = palloc_get_page(flags);
+
+  if (free_page_to_obtain != NULL) {
+    insert_page_into_frame(free_page_to_obtain);
+    retrieve_page_from_frame(free_page_to_obtain);
+  } else {
+#ifndef VM
+    exit(-1);
+#endif
+    // NEED TO IMPLEMENT EVICTION STRATEGY HERE
+    PANIC("need to implement eviction");
+  }
+  return free_page_to_obtain;
 }
