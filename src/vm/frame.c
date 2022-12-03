@@ -1,73 +1,108 @@
 #include <stddef.h>
+#include <stdio.h>
 
-#include "vm/frame.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
+#include "userprog/syscall.h"
+#include "vm/frame.h"
 
-static size_t curr_frames;
-static struct lock lock_on_frame_table;
+static struct hash frame_table;
+static struct lock lock_on_frame;
 
-//array to store frame table
-static struct frame** frame_table;
-
-void initialise_frame(int num_frames) {
-    void* addr = 0;
-    curr_frames = 0;
-    frame_table = malloc(sizeof(struct frame*) * num_frames);
-
-    //while possible keep allocating frames to frame table
-    while (addr == palloc_get_page(PAL_USER)) {
-        frame_table[num_frames] = malloc(sizeof(struct frame));
-        frame_table[num_frames]->page = NULL;
-        frame_table[num_frames]->addr = addr;
-        lock_init(&frame_table[num_frames]->lock);
-        curr_frames++;
-    }
-    lock_init(&lock_on_frame_table);
+//compares keys in both hash_elems
+bool less_compare_function(const struct hash_elem *first_hash_elem, const struct hash_elem *second_hash_elem, void *aux UNUSED) {
+  const struct frame *first = hash_entry(first_hash_elem, struct frame, hash_elem);
+  const struct frame *second = hash_entry(second_hash_elem, struct frame, hash_elem);
+  return first->page < second->page;
 }
 
-void release_page_from_frame(struct frame* frame) {
-    if (!frame) {
-        return;
-    }
-    frame->page = NULL;
+//returns hash of hash_element's data
+unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED) {
+  const struct frame *frame = hash_entry(hash_element, struct frame, hash_elem);
+  return hash_int((unsigned)frame->page);
 }
 
-void free_frame_table(struct page* page) {
-    if (!page) {
-        return;
-    }
-    unsigned i;
-    for (i = 0; i < curr_frames; i++) {
-        lock_acquire(&lock_on_frame_table);
-        if (frame_table[i] && frame_table[i]->page == page) {
-            free(frame_table[i]);
-            lock_release(&lock_on_frame_table);
-            return;
-        }
-        lock_release(&lock_on_frame_table);
-    }
-
+//initialise frame table
+void initialise_frame() {
+  lock_init(&lock_on_frame);
+  hash_init(&frame_table, hashing_function, less_compare_function, NULL);
 }
 
-struct frame* allocate_page_to_frame(struct page* page) {
-    if (!page) {
-        return NULL;
-    }
-    unsigned i;
-    for (i = 0; i < curr_frames; i++) {
-        lock_acquire(&lock_on_frame_table);
-        if (frame_table[i]->page == NULL) {
-            struct frame* frame = malloc(sizeof(struct frame*));
-            frame->page = page;
-            lock_release(&lock_on_frame_table);
-            return frame_table[i];
-        }
-        lock_release(&lock_on_frame_table);
-    }
+//add page to frame table
+//returns true on success
+static bool insert_page_into_frame(void *page_to_insert) {
 
-    // just so returns correct type. NEED TO IMPLEMENT PAGE EVICTIO PROCESS HERE LATER
-    return frame_table[curr_frames];
+  struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
+  if (frame == NULL) {
+    return false;
+  }  
+  lock_acquire(&lock_on_frame);
+  hash_insert(&frame_table, &frame->hash_elem);
+  lock_release(&lock_on_frame); 
+  frame->page = page_to_insert;
+  frame->thread = thread_current ();
+
+  return true;
 }
 
+//retrieve page from frame table
+static struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
+  struct frame frame;
+  frame.page = page_to_retrieve;
+  struct hash_elem *hash_element = hash_find(&frame_table, &frame.hash_elem);
+  if (hash_element != NULL) {
+    return hash_entry(hash_element, struct frame, hash_elem);
+  }
+  return NULL;
+}
+
+//remove page from frame table
+//returns true on success
+static bool remove_page_from_frame(void *page_to_delete) {
+  struct frame *frame = retrieve_page_from_frame(page_to_delete);
+  if (frame == NULL)
+    return false;
+  lock_acquire(&lock_on_frame);
+  hash_delete(&frame_table, &frame->hash_elem);
+  free(frame);
+  lock_release(&lock_on_frame);
+
+  return true;
+}
+
+//gets a free frame from the frame table
+//still need to implement our eviction strategy
+void *obtain_free_frame(enum palloc_flags flags) {
+  void *free_page_to_obtain = palloc_get_page(flags);
+
+  if (free_page_to_obtain != NULL) {
+    insert_page_into_frame(free_page_to_obtain);
+    retrieve_page_from_frame(free_page_to_obtain);
+  } else {
+#ifndef VM
+    exit(-1);
+#endif
+    // NEED TO IMPLEMENT EVICTION STRATEGY HERE
+    PANIC("need to implement eviction");
+  }
+  return free_page_to_obtain;
+}
+
+void free_frame_from_table(void* page_to_free) {
+  remove_page_from_frame(page_to_free);
+  palloc_free_page(page_to_free);
+}
+
+//maps a user virtual page to the frame by setting relevant fields of frame struct
+//returns true on success
+bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address) {
+  struct frame *frame = retrieve_page_from_frame(page);
+  if (frame == NULL) {
+    return false;
+  }
+  frame->frame_page_address = frame_page_address;
+  frame->page_table_entry = page_table_entry;
+  return true;
+}
