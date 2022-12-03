@@ -94,3 +94,15 @@ void free_frame_from_table(void* page_to_free) {
   remove_page_from_frame(page_to_free);
   palloc_free_page(page_to_free);
 }
+
+//maps a user virtual page to the frame by setting relevant fields of frame struct
+//returns true on success
+bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address) {
+  struct frame *frame = retrieve_page_from_frame(page);
+  if (frame == NULL) {
+    return false;
+  }
+  frame->frame_page_address = frame_page_address;
+  frame->page_table_entry = page_table_entry;
+  return true;
+}

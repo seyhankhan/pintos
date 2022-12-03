@@ -116,6 +116,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
+      map_user_vp_to_frame(kpage, pte, upage);
       return true;
     }
   else

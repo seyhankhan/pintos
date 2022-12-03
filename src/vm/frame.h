@@ -9,17 +9,20 @@
 #include "vm/page.h"
 
 struct frame {
-    void *page;                 /* Actual page. */
-    struct thread *thread;      /* Owner thread. */
-    uint32_t *pte;              /* Page table entry of the frame's page. */
-    void *uva;                  /* Address of the frame's page. */
-    struct hash_elem hash_elem; /* Hash element for the hash frame table. */
+    struct thread *thread;                        // thread that owns frame 
+    struct lock lock;                             // allows synchronisation of frame processes 
+    void *page;                                   // pointer to page occupying frame
+    struct hash_elem hash_elem;                   // hash entry for frame table
+    void *frame_page_address;                     // address of the frame's page
+    uint32_t *page_table_entry;                   // frame's page's page table entry
 };
+
 
 bool less_compare_function(const struct hash_elem *first_hash_elem, const struct hash_elem *second_hash_elem, void *aux UNUSED);
 unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED);
 void initialise_frame(void);
 void *obtain_free_frame(enum palloc_flags flags);
 void free_frame_from_table(void* page);
+bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address); 
 
 #endif
