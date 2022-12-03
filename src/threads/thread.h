@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "fixed-point.h"
 #include "synch.h"
 #include "filesys/file.h"
@@ -118,6 +119,7 @@ struct thread
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    struct hash supplemental_page_table;
   };
 
 /* Used to store a thread in a list*/

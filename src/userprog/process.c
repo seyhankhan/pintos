@@ -195,6 +195,9 @@ process_wait (tid_t child_tid UNUSED)
   return exit_code;
 }
 
+static void free_spt_entry(struct hash_elem *e, void *aux UNUSED) {
+  free(hash_entry(e, struct spt_entry, hash_elem));
+}
 
 /* Free the current process's resources. */
 void
@@ -211,6 +214,7 @@ process_exit (void)
   // Remove children and free the memory
   free_children();
 
+  hash_clear(&cur->supplemental_page_table, free_spt_entry);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -500,7 +504,8 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
-static bool
+
+/*static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
@@ -511,25 +516,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
-      /* Calculate how to fill this page.
+       Calculate how to fill this page.
          We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
+         and zero the final PAGE_ZERO_BYTES bytes. 
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      /* Check if virtual page already allocated */
+       Check if virtual page already allocated 
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       
       if (kpage == NULL){
         
-        /* Get a new page of memory. */
+         Get a new page of memory. 
         kpage = palloc_get_page (PAL_USER);
         if (kpage == NULL){
           return false;
         }
         
-        /* Add the page to the process's address space. */
+         Add the page to the process's address space. 
         if (!install_page (upage, kpage, writable)) 
         {
           palloc_free_page (kpage);
@@ -538,22 +543,58 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         
       } else {
         
-        /* Check if writable flag for the page should be updated */
+        Check if writable flag for the page should be updated 
         if(writable && !pagedir_is_writable(t->pagedir, upage)){
           pagedir_set_writable(t->pagedir, upage, writable); 
         }
         
       }
 
-      /* Load data into the page. */
+       Load data into the page. 
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
         return false; 
       }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Advance. */
+       Advance. 
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+    }
+  return true;
+}*/
+
+
+
+static bool
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+{
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+
+      struct spt_entry *pagedata = malloc(sizeof(struct spt_entry));
+      pagedata->file = file;
+      pagedata->upage = upage;
+      pagedata->ofs = ofs;
+      pagedata->read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      pagedata->zero_bytes = PGSIZE - pagedata->read_bytes;
+      pagedata->writable = writable;
+      struct thread *t = thread_current();
+      if (hash_find(&t->supplemental_page_table, &pagedata) != NULL) {
+        hash_insert(&t->supplemental_page_table, &pagedata);
+      } else {
+        free(pagedata);
+      }
+
+      /* Advance. */
+      ofs += pagedata->read_bytes;
+      read_bytes -= pagedata->read_bytes;
+      zero_bytes -= pagedata->zero_bytes;
       upage += PGSIZE;
     }
   return true;
