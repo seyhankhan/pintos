@@ -520,11 +520,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+      //uint8_t *kpage = obtain_free_frame(PAL_USER);
       
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
+        kpage = obtain_free_frame(PAL_USER);
         if (kpage == NULL){
           return false;
         }
@@ -532,7 +533,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          //palloc_free_page (kpage);
+          free_frame_from_table(kpage);
           return false; 
         }     
         
@@ -547,6 +549,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       /* Load data into the page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
+        free_frame_from_table(kpage);
         return false; 
       }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -567,14 +570,16 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = obtain_free_frame(PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        //palloc_free_page (kpage);
+        free_frame_from_table(kpage);
     }
   return success;
 }

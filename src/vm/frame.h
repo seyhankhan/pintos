@@ -20,5 +20,6 @@ bool less_compare_function(const struct hash_elem *first_hash_elem, const struct
 unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED);
 void initialise_frame(void);
 void *obtain_free_frame(enum palloc_flags flags);
+void free_frame_from_table(void* page);
 
 #endif

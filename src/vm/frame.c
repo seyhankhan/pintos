@@ -72,6 +72,8 @@ static bool remove_page_from_frame(void *page_to_delete) {
   return true;
 }
 
+//gets a free frame from the frame table
+//still need to implement our eviction strategy
 void *obtain_free_frame(enum palloc_flags flags) {
   void *free_page_to_obtain = palloc_get_page(flags);
 
@@ -86,4 +88,9 @@ void *obtain_free_frame(enum palloc_flags flags) {
     PANIC("need to implement eviction");
   }
   return free_page_to_obtain;
+}
+
+void free_frame_from_table(void* page_to_free) {
+  remove_page_from_frame(page_to_free);
+  palloc_free_page(page_to_free);
 }
