@@ -2,6 +2,8 @@
 #define PAGE_H
 #include <hash.h>
 #include "filesys/off_t.h"
+#include "lib/kernel/hash.h"
+#include "debug.h"
 
 struct page {
     struct frame* frame;     // frame associated with this page
@@ -19,5 +21,8 @@ struct spt_entry {
     bool writable;
     uint32_t page;
 };
+
+unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
+bool hash_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 #endif 

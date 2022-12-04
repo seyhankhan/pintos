@@ -342,7 +342,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   #ifdef USERPROG
-
+  hash_init(&t->supplemental_page_table, hash_func, hash_less, NULL);
   t->exit_status = malloc(sizeof(struct process_exit_status));
   process_exit_status_init(t->exit_status, t->tid);
 
@@ -663,16 +663,7 @@ is_thread (struct thread *t)
   return t != NULL && t->magic == THREAD_MAGIC;
 }
 
-static unsigned hash_func(const struct hash_elem *e, void *aux UNUSED) {
-  const struct spt_entry *entry = hash_entry(e, struct spt_entry, hash_elem);
-  return hash_bytes(entry->page, sizeof(entry->page));
-}
 
-static unsigned hash_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
-  const struct spt_entry *a_entry = hash_entry(a, struct spt_entry, hash_elem);
-  const struct spt_entry *b_entry = hash_entry(b, struct spt_entry, hash_elem);
-  return (a_entry->page) < (b_entry->page);
-}
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
@@ -693,7 +684,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->lock_waiting = NULL;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  hash_init(&t->supplemental_page_table, hash_func, hash_less, NULL);
+  
   
   #ifdef USERPROG
   list_init (&t->children_status);

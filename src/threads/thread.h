@@ -8,6 +8,7 @@
 #include "fixed-point.h"
 #include "synch.h"
 #include "filesys/file.h"
+#include "vm/page.h"
 
 
 /* States in a thread's life cycle. */
