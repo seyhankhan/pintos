@@ -587,18 +587,19 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       pagedata->read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       pagedata->zero_bytes = PGSIZE - pagedata->read_bytes;
       pagedata->writable = writable;
-      struct thread *t = thread_current();
-      if (hash_find(&t->supplemental_page_table, &pagedata->hash_elem) != NULL) {
-        hash_insert(&t->supplemental_page_table, &pagedata->hash_elem);
-      } else {
-        free(pagedata);
-      }
 
       /* Advance. */
       ofs += PGSIZE;
       read_bytes -= pagedata->read_bytes;
       zero_bytes -= pagedata->zero_bytes;
       upage += PGSIZE;
+      
+      struct thread *t = thread_current();
+      if (hash_find(&t->supplemental_page_table, &pagedata->hash_elem) != NULL) {
+        hash_insert(&t->supplemental_page_table, &pagedata->hash_elem);
+      } else {
+        free(pagedata);
+      }
     }
   return true;
 }
