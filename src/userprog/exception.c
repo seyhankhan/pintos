@@ -8,14 +8,16 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "hash.h"
+#include "vm/frame.h"
 #include "threads/palloc.h"
+#include "userprog/syscall.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -121,6 +123,7 @@ kill (struct intr_frame *f)
    can find more information about both of these in the
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
+
 static void
 page_fault (struct intr_frame *f) 
 {
@@ -150,54 +153,16 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  //get page at address
-  //check spt for if the page should exist
-  //if page should exist, load_segment_2(spt->metadata) return, everything is fine.
-  uint8_t *page = fault_addr - ((uint32_t) fault_addr) % PGSIZE;
-  struct spt_entry pagedata;
-  struct hash_elem *pagedataptr;
-  pagedata.upage = page;
-  struct thread *t = thread_current();
-  pagedataptr = hash_find(&t->supplemental_page_table, &pagedata.hash_elem);
-  if (pagedataptr != NULL) {
-   pagedata = *hash_entry(pagedataptr, struct spt_entry, hash_elem);
-   file_seek (pagedata.file, pagedata.ofs);
-   
-   uint8_t *kpage = pagedir_get_page (t->pagedir, pagedata.upage);
-
-   if (kpage == NULL){
-      //Get a new page of memory. 
-      kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL){
-         //SOMETHING GONE WRONG
-      }
-      //Add the page to the process's address space. 
-      /*if (!install_page (pagedata.upage, kpage, pagedata.writable)) 
-      {
-         palloc_free_page (kpage);
-         //SOMETHIGN GONE WRONG
-      }     */
-   } else {
-      //Check if writable flag for the page should be updated 
-      if(pagedata.writable && !pagedir_is_writable(t->pagedir, pagedata.upage)){
-         pagedir_set_writable(t->pagedir, pagedata.upage, pagedata.writable); 
-      }
+   struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
+   // printf("About to check: %p\n", fpage);
+   // printf("With Fault Addr: %p\n", pg_round_down(fault_addr));
+   if (fpage == NULL || !is_user_vaddr(fault_addr) || !not_present) {
+      // printf("Check Failed\n");
+      exit(-1);
    }
 
-   if (file_read (pagedata.file, kpage, pagedata.read_bytes) != (int) pagedata.read_bytes) {
-      //SOMETHING GONE WRONG
-   }
-   memset (kpage + pagedata.read_bytes, 0, pagedata.zero_bytes);
-
-  } else {
-   /* To implement virtual memory, delete the rest of the function
-      body, and replace it with code that brings in the page to
-      which fault_addr refers. */
-   printf ("Page fault at %p: %s error %s page in %s context.\n",
-            fault_addr,
-            not_present ? "not present" : "rights violation",
-            write ? "writing" : "reading",
-            user ? "user" : "kernel");
-   kill (f);
-  }
+   lazy_load_page(fpage->file, fpage->ofs, fpage->upage,
+            fpage->read_bytes,fpage->zero_bytes, 
+            fpage->writable );
+   // printf("Finished loading\n");
 }

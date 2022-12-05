@@ -1,7 +1,7 @@
 #ifndef FRAME_H
 #define FRAME_H
 
-#include <hash.h>
+#include "lib/kernel/hash.h"
 
 #include "threads/synch.h"
 #include "threads/thread.h"
@@ -9,11 +9,11 @@
 #include "vm/page.h"
 
 struct frame {
+    void *frame_page_address;                     // address of the frame's page
+    struct hash_elem hash_elem;                   // hash entry for frame table
     struct thread *thread;                        // thread that owns frame 
     struct lock lock;                             // allows synchronisation of frame processes 
     void *page;                                   // pointer to page occupying frame
-    struct hash_elem hash_elem;                   // hash entry for frame table
-    void *frame_page_address;                     // address of the frame's page
     uint32_t *page_table_entry;                   // frame's page's page table entry
 };
 

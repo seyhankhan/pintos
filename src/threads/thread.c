@@ -342,7 +342,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   #ifdef USERPROG
-  hash_init(&t->supplemental_page_table, hash_func, hash_less, NULL);
+  hash_init(&t->spt, hash_func, hash_less, NULL);
   t->exit_status = malloc(sizeof(struct process_exit_status));
   process_exit_status_init(t->exit_status, t->tid);
 

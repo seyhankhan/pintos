@@ -134,7 +134,6 @@ main (void)
 #ifdef VM
   initialise_frame();
 #endif
-
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

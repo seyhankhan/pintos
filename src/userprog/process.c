@@ -214,7 +214,7 @@ process_exit (void)
   // Remove children and free the memory
   free_children();
 
-  hash_clear(&cur->supplemental_page_table, free_spt_entry);
+  hash_clear(&cur->spt, free_spt_entry);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -522,7 +522,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-       Check if virtual page already allocated 
+      // Check if virtual page already allocated 
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       //uint8_t *kpage = obtain_free_frame(PAL_USER);
@@ -536,7 +536,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
         
          Add the page to the process's address space. 
-        if (!install_page (upage, kpage, writable)) 
+        // if (!install_page (upage, kpage, writable)) 
         {
           //palloc_free_page (kpage);
           free_frame_from_table(kpage);
@@ -567,8 +567,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }*/
 
-
-
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
@@ -577,29 +575,42 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+  file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
 
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      struct thread *t = thread_current();
       struct spt_entry *pagedata = malloc(sizeof(struct spt_entry));
+
+      if (pagedata == NULL)
+        return false;
+
       pagedata->file = file;
       pagedata->upage = upage;
       pagedata->ofs = ofs;
-      pagedata->read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      pagedata->zero_bytes = PGSIZE - pagedata->read_bytes;
+      pagedata->read_bytes = read_bytes;
+      pagedata->zero_bytes = zero_bytes;
       pagedata->writable = writable;
+
+      struct hash_elem *shared_segment = hash_insert(&t->spt, &pagedata->hash_elem);
+      // printf("Loading page: %p\n", upage);
+      if (shared_segment != NULL)  {
+        // printf("Overlap\n");
+        struct spt_entry *shared_segment_entry = hash_entry(shared_segment, struct spt_entry, hash_elem);
+        shared_segment_entry->writable = shared_segment_entry->writable || writable;
+        shared_segment_entry->read_bytes += read_bytes;
+        struct hash_elem *elem = hash_replace(&t->spt, shared_segment);
+        // hash_replace(&t->spt, shared_segment);
+      }
+      // rememeber to free elem
 
       /* Advance. */
       ofs += PGSIZE;
-      read_bytes -= pagedata->read_bytes;
-      zero_bytes -= pagedata->zero_bytes;
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
-      
-      struct thread *t = thread_current();
-      if (hash_find(&t->supplemental_page_table, &pagedata->hash_elem) != NULL) {
-        hash_insert(&t->supplemental_page_table, &pagedata->hash_elem);
-      } else {
-        free(pagedata);
-      }
     }
   return true;
 }

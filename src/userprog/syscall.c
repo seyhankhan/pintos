@@ -27,7 +27,6 @@ bool is_vaddr(const void *uaddr);
 static void *syscall_handlers[MAX_SYSCALLS];
 
 static void halt(void); 
-static void exit (int status);
 static pid_t exec (const char *file);
 static int wait (pid_t pid);
 static bool create (const char *file, unsigned initial_size);
@@ -102,7 +101,7 @@ static void halt(void) {
   shutdown_power_off();
 }
 
-static void exit(int status) {
+void exit(int status) {
   struct thread *cur = thread_current();
   // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {
@@ -335,9 +334,19 @@ get_file_by_fd (int fd)
   freeing its resources. */
 bool is_vaddr(const void *uaddr)
 {
+  struct thread *t = thread_current();
   if (uaddr == NULL)
     return false;
   if (!is_user_vaddr(uaddr))
     return false;
-  return pagedir_get_page(thread_current()->pagedir, uaddr) != NULL;
+  if (pagedir_get_page(thread_current()->pagedir, uaddr) == NULL) {
+    struct spt_entry temp;
+    temp.upage = uaddr;
+    struct hash_elem *elem = hash_find(&t->spt, &temp.hash_elem);
+    if (elem == NULL) 
+      exit(-1);
+    volatile char pgfault_byte = *(char*) uaddr;
+    return pagedir_get_page(t->pagedir, uaddr) != NULL;
+  }
+  return true;
 }

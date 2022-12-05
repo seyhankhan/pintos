@@ -120,7 +120,7 @@ struct thread
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    struct hash supplemental_page_table;
+    struct hash spt;
   };
 
 /* Used to store a thread in a list*/

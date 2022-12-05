@@ -15,13 +15,13 @@ static struct lock lock_on_frame;
 bool less_compare_function(const struct hash_elem *first_hash_elem, const struct hash_elem *second_hash_elem, void *aux UNUSED) {
   const struct frame *first = hash_entry(first_hash_elem, struct frame, hash_elem);
   const struct frame *second = hash_entry(second_hash_elem, struct frame, hash_elem);
-  return first->page < second->page;
+  return first->frame_page_address < second->frame_page_address;
 }
 
 //returns hash of hash_element's data
 unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED) {
   const struct frame *frame = hash_entry(hash_element, struct frame, hash_elem);
-  return hash_int((unsigned)frame->page);
+  return hash_int((unsigned)frame->frame_page_address);
 }
 
 //initialise frame table
@@ -81,9 +81,10 @@ void *obtain_free_frame(enum palloc_flags flags) {
     insert_page_into_frame(free_page_to_obtain);
     retrieve_page_from_frame(free_page_to_obtain);
   } else {
-#ifndef VM
+    #ifdef VM
     exit(-1);
-#endif
+    #endif
+
     // NEED TO IMPLEMENT EVICTION STRATEGY HERE
     PANIC("need to implement eviction");
   }
