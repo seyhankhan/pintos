@@ -6,8 +6,12 @@
 #include "debug.h"
 
 struct page {
-    struct frame* frame;     // frame associated with this page
-    void* addr;              // page's virtual address
+    struct frame* frame;        // frame associated with this page
+    void* addr;                 // page's virtual address
+    bool can_write;             // whether we can write to this page or not
+    struct list_elem list_elem;  // list element for page
+    struct spt_entry* data;     // holds file data
+    uint32_t pagedir;
 };
 
 struct spt_entry {
@@ -27,5 +31,9 @@ bool hash_less(const struct hash_elem *a, const struct hash_elem *b, void *aux U
 bool lazy_load_page(struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 struct spt_entry *spt_find_addr(const void *addr);
+
+struct page* find_page (void *addr);
+struct page* new_file_page (void *addr, struct file *file, off_t ofs, size_t read_bytes,
+                  size_t zero_bytes, bool writable);
 
 #endif 

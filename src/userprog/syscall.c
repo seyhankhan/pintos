@@ -17,6 +17,9 @@
 #include "threads/synch.h"
 #include "threads/palloc.h"
 #include "devices/input.h"
+#include "vm/mmap.h"
+#include "vm/page.h"
+
 
 #define MAX_SYSCALLS 21
 
@@ -38,14 +41,14 @@ static int write (int fd, const void *buffer, unsigned length);
 static void seek (int fd, unsigned position);
 static unsigned tell (int fd);
 static void close (int fd);
-
+static mapid_t mmap(int fd, void* addr);
+static void munmap(mapid_t mapping);
 
 static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
 
-//should we make argument to this function void* or const char *?
-// static void check_fp_valid(void *file);
 static struct lock lock_filesys;
+static mapid_t get_next_mapid(void);
 
 void
 syscall_init (void) 
@@ -65,6 +68,8 @@ syscall_init (void)
   syscall_handlers[SYS_SEEK] =  &seek;
   syscall_handlers[SYS_TELL] = &tell;
   syscall_handlers[SYS_CLOSE] = &close;
+  syscall_handlers[SYS_MMAP] = &mmap;
+  syscall_handlers[SYS_MUNMAP] = &munmap;
 }
 
 static void
@@ -302,6 +307,70 @@ static int write (int fd, const void *buffer, unsigned length) {
   return length_write;
 }
 
+//map the file open denoted by file descriptor fd into process's vaddr space
+mapid_t mmap(int fd, void* addr) {
+  size_t file_size = filesize(fd);
+  struct file* file = file_reopen(get_file_by_fd(fd)->file);
+
+  //check if file is invalid
+  if (file == NULL || file_size <= 0) {
+    return -1;
+  }
+
+  //check if address is invalid
+  if (pg_ofs(addr) != 0 || addr == NULL || addr == 0x0) {
+    return -1;
+  }
+  
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
+    return -1;
+  }
+
+  //check if filelength is multiple of PGSIZE
+  while (file_size > 0) {
+
+    size_t read_bytes;
+    size_t zero_bytes;
+    void* temp = addr;
+    size_t ofs = 0;
+
+    struct page* page;
+
+    if (file_size >= PGSIZE) {
+      read_bytes = PGSIZE;
+      zero_bytes = 0;    
+    } else {
+      read_bytes = file_size;
+      zero_bytes = PGSIZE - file_size;
+    }
+
+    if (find_page(temp) != NULL) {
+      return -1;
+    }
+
+    page = new_file_page (temp, file, ofs, read_bytes, zero_bytes, true);
+
+    
+    ofs += PGSIZE;
+    file_size -= read_bytes;
+    temp += PGSIZE;
+
+
+  }
+
+  mapid_t mapid = get_next_mapid();
+
+
+  return mapid;
+
+}
+
+
+void munmap(mapid_t mapping) {
+  return;
+}
+
+
 static int get_next_fd() {
   static int next_fd = 2;
   int fd;
@@ -322,6 +391,12 @@ get_file_by_fd (int fd)
     elem = list_next (elem);
   }
   return NULL;
+}
+
+
+static mapid_t get_next_mapid(void) {
+  static mapid_t next_mapid = 0;
+  return next_mapid++;
 }
 
 /* Validate a user's pointer to a virtual address
