@@ -334,7 +334,6 @@ mapid_t mmap(int fd, void* addr) {
     size_t zero_bytes;
     size_t ofs = 0;
 
-    struct page* page;
 
     if (file_size >= PGSIZE) {
       read_bytes = PGSIZE;
@@ -348,7 +347,7 @@ mapid_t mmap(int fd, void* addr) {
       return -1;
     }
 
-    page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
+    struct page *page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
 
     ofs += PGSIZE;
     file_size -= read_bytes;
@@ -431,7 +430,7 @@ bool is_vaddr(const void *uaddr)
     return false;
   if (pagedir_get_page(thread_current()->pagedir, uaddr) == NULL) {
     struct spt_entry temp;
-    temp.upage = uaddr;
+    temp.upage = (void *) uaddr;
     struct hash_elem *elem = hash_find(&t->spt, &temp.hash_elem);
     if (elem == NULL) 
       exit(-1);
