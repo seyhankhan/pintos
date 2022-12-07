@@ -595,9 +595,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       pagedata->writable = writable;
 
       struct hash_elem *shared_segment = hash_insert(&t->spt, &pagedata->hash_elem);
-      if (!pagedata->writable) {
-        insert_shared_page(&pagedata->hash_elem);
-      }
 
       // printf("Loading page: %p\n", upage);
       if (shared_segment != NULL)  {

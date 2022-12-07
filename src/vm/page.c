@@ -92,6 +92,9 @@ bool lazy_load_page(struct spt_entry *spt_entry) {
             free_frame_from_table(kpage);
             return false; 
          }     
+         if (!spt_entry->writable) {
+            insert_shared_page(spt_entry);
+         }
          
       } else {
          
