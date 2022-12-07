@@ -6,7 +6,9 @@
 //mapping ID for memory mapped files
 typedef int mapid_t;
 
-void insert_mfile (mapid_t mapid, int fid, void *start_addr, void *end_addr);
+void insert_memory_file(mapid_t mapid, int fid, void *start_addr, void *end_addr);
+bool delete_memory_file(mapid_t mapid);
+struct memory_file *find_memory_file(mapid_t mapid);
 
 struct memory_file {
     mapid_t mapid;                   //mapping id for file

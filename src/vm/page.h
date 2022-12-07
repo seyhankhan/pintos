@@ -12,7 +12,10 @@ struct page {
     struct list_elem list_elem;  // list element for page
     struct spt_entry* data;     // holds file data
     uint32_t pagedir;
+    bool is_loaded;
+    void* kpage;
 };
+
 
 struct spt_entry {
     struct hash_elem hash_elem;
@@ -24,6 +27,7 @@ struct spt_entry {
     uint32_t zero_bytes;
     bool writable;
     uint32_t page;
+
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
@@ -32,8 +36,10 @@ bool lazy_load_page(struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 struct spt_entry *spt_find_addr(const void *addr);
 
-struct page* find_page (void *addr);
-struct page* new_file_page (void *addr, struct file *file, off_t ofs, size_t read_bytes,
+struct page* find_page(void *addr);
+struct page* create_new_file_page(void *addr, struct file *file, off_t ofs, size_t read_bytes,
                   size_t zero_bytes, bool writable);
+
+bool delete_page(struct page *page);
 
 #endif 

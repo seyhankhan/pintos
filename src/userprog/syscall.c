@@ -325,13 +325,13 @@ mapid_t mmap(int fd, void* addr) {
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
     return -1;
   }
+  void* temp = addr;
 
   //check if filelength is multiple of PGSIZE
   while (file_size > 0) {
 
     size_t read_bytes;
     size_t zero_bytes;
-    void* temp = addr;
     size_t ofs = 0;
 
     struct page* page;
@@ -348,27 +348,42 @@ mapid_t mmap(int fd, void* addr) {
       return -1;
     }
 
-    page = new_file_page (temp, file, ofs, read_bytes, zero_bytes, true);
+    page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
 
-    
     ofs += PGSIZE;
     file_size -= read_bytes;
     temp += PGSIZE;
-
-
   }
-
   mapid_t mapid = get_next_mapid();
-
-
+  insert_memory_file(mapid, fd, addr, temp);
   return mapid;
 
 }
 
+void munmap (mapid_t mapid) {
+  struct memory_file *f = find_memory_file(mapid);
+  if (f == NULL) {
+    exit(-1);
+  }  
 
-void munmap(mapid_t mapping) {
-  return;
+  void *addr = f->start_addr;
+  for (;addr < f->end_addr; addr += PGSIZE) {
+      struct page *page = NULL;
+
+      page = find_page(addr);
+      if (page == NULL)
+        continue;
+
+      if (page->is_loaded == true) {
+        //need to unload page
+      }  
+      delete_page(page);
+  }
+  delete_memory_file(mapid);
+
 }
+  
+
 
 
 static int get_next_fd() {
