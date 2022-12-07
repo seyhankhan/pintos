@@ -18,7 +18,10 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-bool is_stack_access (const void *esp, void *addr);
+bool is_stack_access (void *esp, void *addr);
+
+#define PUSHA_BYTES 32
+#define PUSH_BYTES 4
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -187,8 +190,7 @@ page_fault (struct intr_frame *f)
 }
 
 bool
-is_stack_access (const void *esp, void *addr)
+is_stack_access (void *esp, void *addr)
 {
-  return (uint32_t)addr > 0 && addr >= (esp - 32) &&
-     (PHYS_BASE - pg_round_down (addr)) <= (1<<23);
+  return (is_user_vaddr(addr) && (addr >= (esp - PUSHA_BYTES) || addr >= (esp - PUSH_BYTES)));
 }
