@@ -31,6 +31,9 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "devices/swap.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -132,6 +135,8 @@ main (void)
 #endif
 
 #ifdef VM
+  /* Initialise the swap disk */  
+  swap_init ();
   initialise_frame();
 #endif
   printf ("Boot complete.\n");
