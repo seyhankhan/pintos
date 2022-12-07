@@ -161,8 +161,6 @@ page_fault (struct intr_frame *f)
       exit(-1);
    }
 
-   lazy_load_page(fpage->file, fpage->ofs, fpage->upage,
-            fpage->read_bytes,fpage->zero_bytes, 
-            fpage->writable );
+   lazy_load_page(fpage);
    // printf("Finished loading\n");
 }

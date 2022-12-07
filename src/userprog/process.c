@@ -582,29 +582,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       struct thread *t = thread_current();
-      struct spt_entry *pagedata = malloc(sizeof(struct spt_entry));
+      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable);
 
       if (pagedata == NULL)
         return false;
 
-      pagedata->file = file;
-      pagedata->upage = upage;
-      pagedata->ofs = ofs;
-      pagedata->read_bytes = read_bytes;
-      pagedata->zero_bytes = zero_bytes;
-      pagedata->writable = writable;
-
-      struct hash_elem *shared_segment = hash_insert(&t->spt, &pagedata->hash_elem);
-      // printf("Loading page: %p\n", upage);
-      if (shared_segment != NULL)  {
-        // printf("Overlap\n");
-        struct spt_entry *shared_segment_entry = hash_entry(shared_segment, struct spt_entry, hash_elem);
-        shared_segment_entry->writable = shared_segment_entry->writable || writable;
-        shared_segment_entry->read_bytes += read_bytes;
-        struct hash_elem *elem = hash_replace(&t->spt, shared_segment);
-        // hash_replace(&t->spt, shared_segment);
+      struct spt_entry *overlap = spt_add_page(&t->spt, pagedata);
+      if (overlap != NULL)  {
+        overlap->writable = overlap->writable || writable;
+        overlap->read_bytes += read_bytes;
       }
-      // rememeber to free elem
 
       /* Advance. */
       ofs += PGSIZE;
@@ -614,6 +601,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     }
   return true;
 }
+
+
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
