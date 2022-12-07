@@ -18,6 +18,7 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+bool is_stack_access (const void *esp, void *addr);
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -155,12 +156,39 @@ page_fault (struct intr_frame *f)
 
    struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
    // printf("About to check: %p\n", fpage);
-   // printf("With Fault Addr: %p\n", pg_round_down(fault_addr));
-   if (fpage == NULL || !is_user_vaddr(fault_addr) || !not_present) {
-      // printf("Check Failed\n");
+   // printf("With Fault Addr: %p\n with stack: %p\n", fault_addr, f->esp);
+   if (fpage != NULL && write && !fpage->writable) {
+      exit(-1);
+   }
+   if (fpage != NULL && is_user_vaddr(fault_addr)) {
+      // printf("Lazy loading\n");
+      lazy_load_page(fpage);
+      return;
+   } else if (is_stack_access(f->esp, fault_addr)) {
+      // printf("Grow Stack!\n");
+      struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
+      spt_add_page(&thread_current()->spt, new_stack_page);
+      uint8_t *kpage = obtain_free_frame(PAL_USER);
+      if (kpage == NULL){
+         // Ideally this won't be the case as we will evict frames to make space
+         exit(-1);
+      }
+      memset (kpage, 0, PGSIZE);
+      // Add the page to the process's address space. 
+      if (!pagedir_set_page(thread_current()->pagedir, new_stack_page->upage, kpage, new_stack_page->writable)) {
+         free_frame_from_table(kpage);
+         exit(-1);
+      }
+      
+   } else if (user || not_present) {
       exit(-1);
    }
 
-   lazy_load_page(fpage);
-   // printf("Finished loading\n");
+}
+
+bool
+is_stack_access (const void *esp, void *addr)
+{
+  return (uint32_t)addr > 0 && addr >= (esp - 32) &&
+     (PHYS_BASE - pg_round_down (addr)) <= (1<<23);
 }

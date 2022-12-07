@@ -657,30 +657,12 @@ setup_user_stack(char **argv, int argc, struct intr_frame *if_) {
   /* Push Arguments to the stack frame - order doesn't matter for now 
      as they will be referenced by pointers*/
   void *ptr_arr[argc];
-  if (!push_strings(argv, argc, if_, ptr_arr)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!word_align(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_null_sentinel(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_arg_pointers(if_, argc, ptr_arr)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_argc(if_, argc)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_null_sentinel(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }  
+  push_strings(argv, argc, if_, ptr_arr);
+  word_align(if_);
+  push_null_sentinel(if_);
+  push_arg_pointers(if_, argc, ptr_arr);
+  push_argc(if_, argc);
+  push_null_sentinel(if_);
   
 }
 
@@ -689,9 +671,6 @@ push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
   for (int i = argc - 1; i >= 0; i--) {
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
     if_->esp = (void *) (((char*) if_->esp) - token_length);
-    if (PHYS_BASE - if_->esp > PGSIZE) {
-      return false;
-    }
     strlcpy ((char*)if_->esp, argv[i], token_length);
     // Store the pointer of the argument that was just pushed on to the stack
     ptr_arr[i] = if_->esp;
@@ -702,10 +681,7 @@ push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
 /* Round stack pointer down to a multiple of 4 before pushing pointers
     for better performance (word-aligned access)*/
 static bool word_align(struct intr_frame *if_) {
-
   if_->esp -= (unsigned) if_->esp % 4;  
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-      return false;
   return true;
 }
 
@@ -713,8 +689,6 @@ static bool word_align(struct intr_frame *if_) {
 static bool push_null_sentinel(struct intr_frame *if_) {
   // decrement stack pointer by size of sentinel
   if_->esp = (((void**) if_->esp) - 1);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   *((void**)(if_->esp)) = NULL;
   return true;
 }
@@ -725,15 +699,11 @@ push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
   // Push pointers to arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     if_->esp = (((void**) if_->esp) - 1);
-    if (PHYS_BASE - if_->esp > PGSIZE) 
-      return false;
     memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
   }
   // Push address of argv[0]
   void *addr_argv = if_->esp;
   if_->esp = (((void**) if_->esp) - 1);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
   return true;
 }
@@ -741,8 +711,6 @@ push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
 /* Pushes argc to the stack*/
 static bool push_argc(struct intr_frame *if_, int argc) {
   if_->esp -= sizeof(argc);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   memcpy(if_->esp, &argc, sizeof(argc));
   return true;
 }
