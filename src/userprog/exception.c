@@ -158,11 +158,9 @@ page_fault (struct intr_frame *f)
    // printf("With Fault Addr: %p\n", pg_round_down(fault_addr));
    if (fpage == NULL || !is_user_vaddr(fault_addr) || !not_present) {
       // printf("Check Failed\n");
-      exit(-1);
+      kill(f);
    }
 
-   lazy_load_page(fpage->file, fpage->ofs, fpage->upage,
-            fpage->read_bytes,fpage->zero_bytes, 
-            fpage->writable );
+   lazy_load_page(fpage);
    // printf("Finished loading\n");
 }

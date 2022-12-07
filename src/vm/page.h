@@ -20,12 +20,14 @@ struct spt_entry {
     uint32_t zero_bytes;
     bool writable;
     uint32_t page;
+    uint32_t *page_dir;
 };
 
+void init_shared_pages(void);
+void insert_shared_page(struct spt_entry *spt_entry);
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
 bool hash_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
-bool lazy_load_page(struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable);
+bool lazy_load_page(struct spt_entry *spt_entry);
 struct spt_entry *spt_find_addr(const void *addr);
 
 #endif 
