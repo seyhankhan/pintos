@@ -343,6 +343,7 @@ thread_create (const char *name, int priority,
 
   #ifdef USERPROG
   hash_init(&t->spt, hash_func, hash_less, NULL);
+  hash_init(&t->memory_mapped_files, hash_mfile, hash_less_mfile, NULL);
   t->exit_status = malloc(sizeof(struct process_exit_status));
   process_exit_status_init(t->exit_status, t->tid);
 

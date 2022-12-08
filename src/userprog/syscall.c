@@ -19,6 +19,7 @@
 #include "devices/input.h"
 #include "vm/mmap.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 
 #define MAX_SYSCALLS 21
@@ -112,6 +113,7 @@ void exit(int status) {
   if (lock_held_by_current_thread(&lock_filesys)) {
     lock_release(&lock_filesys);
   }
+  // Free mmap files in process exit or here
   cur->exit_status->exit_code = status;
 
   thread_exit();
@@ -308,11 +310,60 @@ static int write (int fd, const void *buffer, unsigned length) {
 }
 
 //map the file open denoted by file descriptor fd into process's vaddr space
+// mapid_t mmap(int fd, void* addr) {
+//   size_t file_size = filesize(fd);
+//   struct file* file = file_reopen(get_file_by_fd(fd)->file);
+
+//   //check if file is invalid
+//   if (file == NULL || file_size <= 0) {
+//     return -1;
+//   }
+
+//   //check if address is invalid
+//   if (pg_ofs(addr) != 0 || addr == NULL || addr == 0x0) {
+//     return -1;
+//   }
+  
+//   if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
+//     return -1;
+//   }
+//   void* temp = addr;
+
+//   //check if filelength is multiple of PGSIZE
+//   while (file_size > 0) {
+
+//     size_t read_bytes;
+//     size_t zero_bytes;
+//     size_t ofs = 0;
+
+//     if (file_size >= PGSIZE) {
+//       read_bytes = PGSIZE;
+//       zero_bytes = 0;    
+//     } else {
+//       read_bytes = file_size;
+//       zero_bytes = PGSIZE - file_size;
+//     }
+
+//     // if (find_page(temp) != NULL) {
+//     //   return -1;
+//     // }
+
+//     struct page *page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
+
+//     ofs += PGSIZE;
+//     file_size -= read_bytes;
+//     temp += PGSIZE;
+//   }
+//   mapid_t mapid = get_next_mapid();
+//   insert_memory_file(mapid, fd, addr, temp);
+//   return mapid;
+// }
+
 mapid_t mmap(int fd, void* addr) {
   size_t file_size = filesize(fd);
   struct file* file = file_reopen(get_file_by_fd(fd)->file);
 
-  //check if file is invalid
+  /*If file is not opened/not valid and filesize <= 0 then return -1*/ 
   if (file == NULL || file_size <= 0) {
     return -1;
   }
@@ -325,15 +376,16 @@ mapid_t mmap(int fd, void* addr) {
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
     return -1;
   }
+
+  struct list file_pages;
+  list_init(&file_pages);
   void* temp = addr;
 
-  //check if filelength is multiple of PGSIZE
   while (file_size > 0) {
 
     size_t read_bytes;
     size_t zero_bytes;
     size_t ofs = 0;
-
 
     if (file_size >= PGSIZE) {
       read_bytes = PGSIZE;
@@ -343,53 +395,94 @@ mapid_t mmap(int fd, void* addr) {
       zero_bytes = PGSIZE - file_size;
     }
 
-    if (find_page(temp) != NULL) {
+    // Check if there already exist a loaded page 
+    uint8_t *kpage = pagedir_get_page (thread_current()->pagedir, addr);
+    // If either are the case then return -1 - this address is already mapped
+    if (kpage != NULL)
+      return -1;
+    else {
+      kpage = obtain_free_frame(PAL_USER);
+      if (kpage == NULL){
+        return -1;
+      }
+    }
+    // Check if an entry exists in the spt for this address 
+    struct spt_entry *loaded = spt_find_addr(addr);
+    if (loaded != NULL) {
       return -1;
     }
+    // Obtain a kpage
 
-    struct page *page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
+    // Store the addresses of the kpage and upage in the file_page struct and add it to the list
+    // TODO: Synchronisation and free fps
+    struct file_page *fp = malloc(sizeof(struct file_page));
+    fp->kpage = kpage;
+    fp->upage = temp;
+    list_push_front(&file_pages, &fp->elem);
 
+    // Add the page to the process's address space. 
+    if (!pagedir_set_page(thread_current()->pagedir, temp, kpage, true)) {
+        printf("Failed\n");
+        free_frame_from_table(kpage);
+        return false; 
+    } 
+
+    //  Load data into the page. - Currently not lazy loading
+    if (file_read (file, kpage, read_bytes) != (int) read_bytes) {
+        return false; 
+    }   
+    // printf("Advancing\n");
+    /* Advance */
     ofs += PGSIZE;
     file_size -= read_bytes;
     temp += PGSIZE;
   }
+  // printf("Exiting\n");
   mapid_t mapid = get_next_mapid();
-  insert_memory_file(mapid, fd, addr, temp);
-  return mapid;
+  insert_mfile(mapid, file, &file_pages);
+  // printf("List size: %d\n", list_size(&file_pages));
 
+  return mapid;
 }
 
 void munmap (mapid_t mapid) {
-  struct memory_file *f = find_memory_file(mapid);
-  if (f == NULL) {
+  // printf("About to unmap\n");
+  struct memory_file *mfile = get_mfile(mapid);
+  if (mfile == NULL) {
+    // printf("Mfile is null\n");
     exit(-1);
-  }  
+  } 
+  // printf("Mfile is not null\n");
+  // Free all of the pages
+  struct list_elem *elem;
+  // printf("Before loop List size: %d\n", mfile->num_of_pages);
 
-  void *addr = f->start_addr;
-  for (;addr < f->end_addr; addr += PGSIZE) {
-      struct page *page = NULL;
-
-      page = find_page(addr);
-      if (page == NULL)
-        continue;
-
-      if (page->is_loaded == true) {
-        //need to unload page
-      }  
-      delete_page(page);
+  for (int i = mfile->num_of_pages; i > 0; i --) {
+    elem = list_pop_front(mfile->file_pages);
+    // Free upage if it exists
+    struct file_page *fp = list_entry(elem, struct file_page, elem);
+    // printf("kpage: %p\n", fp->kpage);
+    // printf("upage: %p\n", fp->upage);
+    // printf("During loop List size: %d\n", list_size(&mfile->file_pages));
+    free_frame_from_table(fp->kpage);
+    pagedir_clear_page(thread_current()->pagedir, fp->upage);
+    free(fp);
   }
-  delete_memory_file(mapid);
-
+  delete_mfile(mfile);
 }
+
   
-
-
 
 static int get_next_fd() {
   static int next_fd = 2;
   int fd;
   fd = next_fd++;
   return fd;
+}
+
+static mapid_t get_next_mapid(void) {
+  static mapid_t next_mapid = 0;
+  return next_mapid++;
 }
 
 /* USERPROG Function, given the tid returns the thread with that tid*/
@@ -408,10 +501,7 @@ get_file_by_fd (int fd)
 }
 
 
-static mapid_t get_next_mapid(void) {
-  static mapid_t next_mapid = 0;
-  return next_mapid++;
-}
+
 
 /* Validate a user's pointer to a virtual address
   must not be

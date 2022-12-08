@@ -24,7 +24,7 @@ unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED
   return hash_int((unsigned)frame->frame_page_address);
 }
 
-//initialise frame table
+/* Initialise frame table */
 void initialise_frame() {
   lock_init(&lock_on_frame);
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);

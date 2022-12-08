@@ -9,6 +9,7 @@
 #include "synch.h"
 #include "filesys/file.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 
 
 /* States in a thread's life cycle. */
@@ -117,7 +118,7 @@ struct thread
     struct semaphore sema_execute;      /* Synchronization in process_execute */
     struct file* exec_file;             /* Process is using this executable file */
     struct list opened_files;           /* A list of files opened by the thread*/
-    struct list memory_mapped_files;   
+    struct hash memory_mapped_files;   
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

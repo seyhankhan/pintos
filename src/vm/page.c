@@ -8,9 +8,6 @@
 #include <string.h>
 #include "threads/malloc.h"
 
-static struct list list_of_pages;
-static struct lock lock_on_list;
-static int count = 0;
 
 unsigned hash_func (const struct hash_elem *e, void *aux UNUSED) 
 {
@@ -59,7 +56,6 @@ bool lazy_load_page(struct spt_entry *entry) {
          // Ideally this won't be the case as we will evict frames to make space
          return false;
       }
-      
       // Add the page to the process's address space. 
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
@@ -90,6 +86,20 @@ struct spt_entry *spt_add_page(struct hash *spt, struct spt_entry *entry) {
     return hash_entry(old, struct spt_entry, hash_elem);
   }
   return NULL;
+}
+
+
+bool spt_delete_page (struct hash *spt, void *page)  {
+   struct spt_entry *e = spt_find_addr(page);
+   if (!e)
+      return false;
+
+   struct hash_elem *he = hash_delete(spt, &e->hash_elem);
+   
+   if (!he) {
+      return false;
+   }
+   return true;
 }
 
 struct spt_entry *create_file_page(struct file *file, void *upage,  
@@ -141,51 +151,51 @@ bool load_page(struct spt_entry *page) {
    return true;
 }
 
-struct page* find_page(void *addr) {
-  uint32_t *pagedir = thread_current ()->pagedir;
-  struct list_elem *e;
-  lock_acquire(&lock_on_list);
+// struct page* find_page(void *addr) {
+//   uint32_t *pagedir = thread_current ()->pagedir;
+//   struct list_elem *e;
+//   lock_acquire(&lock_on_list);
 
-  for (e = list_begin (&list_of_pages); e != list_end (&list_of_pages);
-       e = list_next(e)) {
-      struct page *page = list_entry(e, struct page, list_elem);
-      if (page->addr == addr && page->pagedir == pagedir)
-        {
-          lock_release (&lock_on_list);
-          return page;
-        }
-    }
-  lock_release (&lock_on_list);
-  return NULL;
-}
+//   for (e = list_begin (&list_of_pages); e != list_end (&list_of_pages);
+//        e = list_next(e)) {
+//       struct page *page = list_entry(e, struct page, list_elem);
+//       if (page->addr == addr && page->pagedir == pagedir)
+//         {
+//           lock_release (&lock_on_list);
+//           return page;
+//         }
+//     }
+//   lock_release (&lock_on_list);
+//   return NULL;
+// }
 
-struct page* create_new_file_page(void *addr, struct file *file, off_t ofs, size_t read_bytes, size_t zero_bytes, bool can_write) {
-   struct page* page = (struct page*) malloc (sizeof(struct page));
-   if (page == NULL) {
-      return NULL;
-   }
+// struct page* create_new_file_page(void *addr, struct file *file, off_t ofs, size_t read_bytes, size_t zero_bytes, bool can_write) {
+//    struct page* page = (struct page*) malloc (sizeof(struct page));
+//    if (page == NULL) {
+//       return NULL;
+//    }
 
-   page->addr = addr;
-   page->data->file = file;
-   page->data->ofs = ofs;
-   page->data->read_bytes = read_bytes;
-   page->data->zero_bytes = zero_bytes;
-   page->can_write = can_write;
+//    page->addr = addr;
+//    page->data->file = file;
+//    page->data->ofs = ofs;
+//    page->data->read_bytes = read_bytes;
+//    page->data->zero_bytes = zero_bytes;
+//    page->can_write = can_write;
 
-   //add page to list of pages
-   lock_acquire (&lock_on_list);
-   list_push_back (&list_of_pages, &page->list_elem);
-   lock_release (&lock_on_list);
+//    //add page to list of pages
+//    lock_acquire (&lock_on_list);
+//    list_push_back (&list_of_pages, &page->list_elem);
+//    lock_release (&lock_on_list);
    
-   return page;
-}  
+//    return page;
+// }  
 
-bool delete_page(struct page *page) {
-  lock_acquire (&lock_on_list);
-  list_remove (&page->list_elem);
-  free (page);
-  --count;
-  lock_release (&lock_on_list);
-  return true;
-}     
+// bool delete_page(struct page *page) {
+//   lock_acquire (&lock_on_list);
+//   list_remove (&page->list_elem);
+//   free (page);
+//   --count;
+//   lock_release (&lock_on_list);
+//   return true;
+// }     
 

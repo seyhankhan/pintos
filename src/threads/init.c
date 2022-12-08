@@ -33,6 +33,7 @@
 #endif
 #ifdef VM
 #include "devices/swap.h"
+#include "vm/mmap.h"
 #endif
 #ifdef FILESYS
 #include "devices/block.h"
@@ -137,7 +138,10 @@ main (void)
 #ifdef VM
   /* Initialise the swap disk */  
   swap_init ();
+  /* Initialise Frame Table*/
   initialise_frame();
+  /* Initialise Memory Mapped File structs*/
+  init_mmap();
 #endif
   printf ("Boot complete.\n");
   
