@@ -7,9 +7,19 @@
 #include "threads/synch.h"
 #include "userprog/syscall.h"
 #include "vm/frame.h"
+#include "userprog/pagedir.h"
 
 static struct hash frame_table;
 static struct lock lock_on_frame;
+static struct lock lock_eviction;
+
+static struct list frames_for_eviction;
+static struct list_elem *next;
+
+static void evict_frame(void);
+static struct frame *get_next_frame_for_eviction(void);
+static void eviction_move_next(void);
+static bool look_through_flip_if_necessary(struct frame *vf);
 
 //compares keys in both hash_elems
 bool less_compare_function(const struct hash_elem *first_hash_elem, const struct hash_elem *second_hash_elem, void *aux UNUSED) {
@@ -34,7 +44,7 @@ void initialise_frame() {
 //returns true on success
 static bool insert_page_into_frame(void *page_to_insert) {
 
-  struct frame *frame = (struct frame *) malloc (sizeof (struct frame));
+  struct frame *frame = (struct frame *) malloc(sizeof (struct frame));
   if (frame == NULL) {
     return false;
   }  
@@ -42,7 +52,7 @@ static bool insert_page_into_frame(void *page_to_insert) {
   hash_insert(&frame_table, &frame->hash_elem);
   lock_release(&lock_on_frame); 
   frame->page = page_to_insert;
-  frame->thread = thread_current ();
+  frame->thread = thread_current();
 
   return true;
 }
@@ -86,10 +96,80 @@ void *obtain_free_frame(enum palloc_flags flags) {
     #endif
 
     // NEED TO IMPLEMENT EVICTION STRATEGY HERE
-    PANIC("need to implement eviction");
+    
+    evict_frame();
+    
+    //PANIC("need to implement eviction");
   }
   return free_page_to_obtain;
 }
+
+//clock second chance variant. circular linked list
+static void evict_frame() {
+  struct frame *frame_to_be_evicted = NULL;
+  
+  lock_acquire(&lock_on_frame);
+  lock_acquire(&lock_eviction);
+
+  while (frame_to_be_evicted == NULL) {
+		struct frame *frame = get_next_frame_for_eviction();
+    ASSERT (frame != NULL);
+
+    //move on id frame is pinned or accessed
+    if (frame->is_pinned == true || look_through_flip_if_necessary(frame) == false) {
+      eviction_move_next();
+  	  continue;  
+    }    
+    frame_to_be_evicted = frame;
+  }
+
+  lock_release(&lock_on_frame);
+  lock_release(&lock_eviction);
+
+  //need to free everything
+  
+}
+
+static struct frame *get_next_frame_for_eviction() {
+	if (next == NULL || next == list_end(&frames_for_eviction)) {
+  	next = list_begin(&frames_for_eviction);
+  }  
+  if (next != NULL) {
+    //get frame struct from frame list
+		struct frame *vf = list_entry(next, struct frame, list_elem);
+    return vf;
+  }  
+  //shouldn't reach here
+
+}
+
+
+//move position of next in frames_for_eviction
+static void eviction_move_next() {
+  if (next == NULL || next == list_end(&frames_for_eviction)) {
+    next = list_begin(&frames_for_eviction);
+  } else {
+    next = list_next(next); 
+  }
+}
+
+//go through all pages sharing the frame, inspect accessed bit of each page
+//if all 0, evict this frame
+//otherwise, flip first bit to 1
+
+static bool look_through_flip_if_necessary(struct frame *vf) {
+  struct list_elem *e;
+  
+  for (e = list_begin(&vf->pages); e != list_end(&vf->pages); e = list_next(e)) {
+    struct page *page = list_entry(e, struct page, frame_elem);
+    if (pagedir_is_accessed(&page->pagedir, page->addr)) {
+      pagedir_set_accessed(&page->pagedir, page->addr, false);
+      return false;
+    }
+  }
+  return true;
+}
+
 
 void free_frame_from_table(void* page_to_free) {
   remove_page_from_frame(page_to_free);

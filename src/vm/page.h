@@ -14,6 +14,7 @@ struct page {
     uint32_t pagedir;
     bool is_loaded;
     void* kpage;
+    struct list_elem frame_elem;            
 };
 
 
@@ -28,6 +29,7 @@ struct spt_entry {
     bool writable;
     uint32_t page;
     bool referenced;
+
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);

@@ -15,6 +15,9 @@ struct frame {
     struct lock lock;                             // allows synchronisation of frame processes 
     void *page;                                   // pointer to page occupying frame
     uint32_t *page_table_entry;                   // frame's page's page table entry
+    struct list_elem list_elem;                   // frame list's list elem
+    bool is_pinned;                               // boolean check whether frame is pinned or not
+    struct list pages;
 };
 
 
@@ -25,5 +28,6 @@ void *obtain_free_frame(enum palloc_flags flags);
 void free_frame_from_table(void* page);
 bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address); 
 struct frame *retrieve_page_from_frame(void *page_to_retrieve);
+
 
 #endif

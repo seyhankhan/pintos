@@ -169,6 +169,8 @@ bool load_page(struct spt_entry *page)
    return true;
 }
 
+
+/*
 void page_replacement(struct thread *t)
 {
    struct spt_entry *spte = &t->spt;
@@ -186,6 +188,7 @@ void page_replacement(struct thread *t)
       }
    }
 }
+*/
 
 // struct page* find_page(void *addr) {
 //   uint32_t *pagedir = thread_current ()->pagedir;
