@@ -28,7 +28,6 @@ struct spt_entry {
     uint32_t zero_bytes;
     bool writable;
     bool referenced;
-
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
