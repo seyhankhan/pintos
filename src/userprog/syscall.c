@@ -115,7 +115,7 @@ void exit(int status) {
   }
   // Free mmap files in process exit or here
   cur->exit_status->exit_code = status;
-
+  
   thread_exit();
 }
 
@@ -420,7 +420,9 @@ mapid_t mmap(int fd, void* addr) {
     if (spt_page == NULL)
       return -1;
 
+    // printf("Page : %p is about to be added to the spt\n",spt_page->upage);
     spt_add_page(&thread_current()->spt, spt_page);
+    // printf("Page : %p has been added to the spt\n",spt_page->upage);
     // Shouldn't be any overlap
     // struct spt_entry *overlap = spt_add_page(&thread_current()->spt, spt_page);
     // if (overlap != NULL)  {
@@ -457,6 +459,7 @@ void munmap (mapid_t mapid) {
   for (void *addr = mfile->start_addr; addr < mfile->end_addr; addr+=PGSIZE, ofs+=PGSIZE) {
     struct spt_entry *page = spt_find_addr(addr);
     // Check if spt entry exists
+    // printf("Page: %p\n", page);
     if (page != NULL) {
       if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
         // printf("Writing to file\n");
