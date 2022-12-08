@@ -32,7 +32,7 @@ struct spt_entry *spt_find_addr(const void *addr) {
   }
 }
 
-bool lazy_load_page(struct spt_entry *entry) {
+bool load_page_from_spt(struct spt_entry *entry) {
 
    ASSERT(pg_ofs (entry->upage) == 0);
    ASSERT(entry->ofs % PGSIZE == 0);
@@ -48,8 +48,6 @@ bool lazy_load_page(struct spt_entry *entry) {
    uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
    if (kpage == NULL){
       
-      // if (!load_page(entry))
-      //    return false;
       // Get a new page of memory.
       kpage = obtain_free_frame(PAL_USER);
       if (kpage == NULL){
@@ -134,68 +132,3 @@ struct spt_entry *create_zero_page(void *addr, bool writable) {
 
    return page;
 }
-
-bool load_page(struct spt_entry *page) {
-   // Get a new page of memory.
-   uint8_t *kpage = obtain_free_frame(PAL_USER);
-   if (kpage == NULL){
-      // Ideally this won't be the case as we will evict frames to make space
-      return false;
-   }
-   // Add the page to the process's address space. 
-   if (!pagedir_set_page(thread_current()->pagedir, page->upage, kpage, page->writable)) {
-      free_frame_from_table(kpage);
-      return false; 
-   } 
-
-   return true;
-}
-
-// struct page* find_page(void *addr) {
-//   uint32_t *pagedir = thread_current ()->pagedir;
-//   struct list_elem *e;
-//   lock_acquire(&lock_on_list);
-
-//   for (e = list_begin (&list_of_pages); e != list_end (&list_of_pages);
-//        e = list_next(e)) {
-//       struct page *page = list_entry(e, struct page, list_elem);
-//       if (page->addr == addr && page->pagedir == pagedir)
-//         {
-//           lock_release (&lock_on_list);
-//           return page;
-//         }
-//     }
-//   lock_release (&lock_on_list);
-//   return NULL;
-// }
-
-// struct page* create_new_file_page(void *addr, struct file *file, off_t ofs, size_t read_bytes, size_t zero_bytes, bool can_write) {
-//    struct page* page = (struct page*) malloc (sizeof(struct page));
-//    if (page == NULL) {
-//       return NULL;
-//    }
-
-//    page->addr = addr;
-//    page->data->file = file;
-//    page->data->ofs = ofs;
-//    page->data->read_bytes = read_bytes;
-//    page->data->zero_bytes = zero_bytes;
-//    page->can_write = can_write;
-
-//    //add page to list of pages
-//    lock_acquire (&lock_on_list);
-//    list_push_back (&list_of_pages, &page->list_elem);
-//    lock_release (&lock_on_list);
-   
-//    return page;
-// }  
-
-// bool delete_page(struct page *page) {
-//   lock_acquire (&lock_on_list);
-//   list_remove (&page->list_elem);
-//   free (page);
-//   --count;
-//   lock_release (&lock_on_list);
-//   return true;
-// }     
-

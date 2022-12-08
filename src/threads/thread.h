@@ -118,12 +118,11 @@ struct thread
     struct semaphore sema_execute;      /* Synchronization in process_execute */
     struct file* exec_file;             /* Process is using this executable file */
     struct list opened_files;           /* A list of files opened by the thread*/
-    struct list memory_mapped_files;   
-   //  struct hash memory_mapped_files;   
+    struct list memory_mapped_files;    /* List of Memory Mapped Files*/
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    struct hash spt;
+    struct hash spt;                    /* Supplemental Page Table*/
   };
 
 /* Used to store a thread in a list*/
