@@ -367,7 +367,6 @@ mapid_t mmap(int fd, void* addr) {
   if (file == NULL || file_size <= 0) {
     return -1;
   }
-
   //check if address is invalid
   if (pg_ofs(addr) != 0 || addr == NULL || addr == 0x0) {
     return -1;
@@ -399,7 +398,7 @@ mapid_t mmap(int fd, void* addr) {
     
 
     // Check if there already exist a loaded page 
-    uint8_t *kpage = pagedir_get_page (thread_current()->pagedir, addr);
+    uint8_t *kpage = pagedir_get_page (thread_current()->pagedir, temp);
     // If either are the case then return -1 - this address is already mapped
     if (kpage != NULL)
       return -1;
@@ -410,7 +409,7 @@ mapid_t mmap(int fd, void* addr) {
       }
     }
     // Check if an entry exists in the spt for this address 
-    struct spt_entry *loaded = spt_find_addr(addr);
+    struct spt_entry *loaded = spt_find_addr(temp);
     if (loaded != NULL) {
       return -1;
     }
