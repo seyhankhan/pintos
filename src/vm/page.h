@@ -39,5 +39,6 @@ bool spt_delete_page (struct hash *spt, void *page);
 struct spt_entry *create_file_page(struct file *file, void *upage,  off_t ofs, 
                                    size_t read_bytes,size_t zero_bytes, bool writable);
 struct spt_entry *create_zero_page(void *addr, bool writable);
+void init_page_lock(void);
 
 #endif 

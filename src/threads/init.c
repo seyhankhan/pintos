@@ -141,7 +141,8 @@ main (void)
   /* Initialise Frame Table*/
   initialise_frame();
   /* Initialise Memory Mapped File structs*/
-  init_mmap();
+  init_mmap_lock();
+  init_page_lock();
 #endif
   printf ("Boot complete.\n");
   
