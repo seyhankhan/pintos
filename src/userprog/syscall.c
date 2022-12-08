@@ -380,7 +380,8 @@ mapid_t mmap(int fd, void* addr) {
   struct list file_pages;
   list_init(&file_pages);
   void* temp = addr;
-
+  void* start_addr = addr;
+  void* end_addr = addr;
   while (file_size > 0) {
 
     size_t read_bytes;
@@ -395,6 +396,7 @@ mapid_t mmap(int fd, void* addr) {
       read_bytes = file_size;
       zero_bytes = PGSIZE - file_size;
     }
+    
 
     // Check if there already exist a loaded page 
     uint8_t *kpage = pagedir_get_page (thread_current()->pagedir, addr);
@@ -412,14 +414,7 @@ mapid_t mmap(int fd, void* addr) {
     if (loaded != NULL) {
       return -1;
     }
-    // Obtain a kpage
-
-    // Store the addresses of the kpage and upage in the file_page struct and add it to the list
     // TODO: Synchronisation and free fps
-    struct file_page *fp = malloc(sizeof(struct file_page));
-    fp->kpage = kpage;
-    fp->upage = temp;
-    list_push_front(&file_pages, &fp->elem);
     // Lazy Load the page into the spt
     struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
 
@@ -436,13 +431,15 @@ mapid_t mmap(int fd, void* addr) {
       
     // printf("Advancing\n");
     /* Advance */
-    ofs += PGSIZE;
     file_size -= read_bytes;
+    ofs += PGSIZE;
     temp += PGSIZE;
+    end_addr += read_bytes;
+    // printf("readbytes: %d\n", read_bytes);
   }
   // printf("Exiting\n");
   mapid_t mapid = get_next_mapid();
-  insert_mfile(mapid, file, &file_pages);
+  insert_mfile(mapid, file, start_addr, end_addr);
   // printf("List size: %d\n", list_size(&file_pages));
 
   return mapid;
@@ -456,10 +453,24 @@ void munmap (mapid_t mapid) {
     exit(-1);
   } 
   // printf("Mfile is not null\n");
-  // Free all of the pages
-  // struct list_elem *elem;
+  // printf("Start: %p, End: %p\n",mfile->start_addr, mfile->end_addr);
+  
+  for (void *addr = mfile->start_addr; addr < mfile->end_addr; addr+=PGSIZE) {
+    struct spt_entry *page = spt_find_addr(addr);
+    // Check if spt entry exists
+    if (page != NULL) {
+      void *kpage = pagedir_get_page(thread_current()->pagedir, addr);
+      if (kpage != NULL) {
+        // if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
+        //   printf("Page has been modified\n");
+        // }
+        free_frame_from_table(kpage);
+      }
+      
+      pagedir_clear_page(thread_current()->pagedir, addr);
+    }
+  }
   // printf("Before loop List size: %d\n", mfile->num_of_pages);
-
   // for (int i = mfile->num_of_pages; i > 0; i --) {
   //   // printf("About to pop\n");
   //   elem = list_pop_front(mfile->file_pages);
@@ -468,8 +479,8 @@ void munmap (mapid_t mapid) {
   //   // printf("kpage: %p\n", fp->kpage);
   //   // printf("upage: %p\n", fp->upage);
   //   // printf("During loop List size: %d\n", i);
-  //   free_frame_from_table(fp->kpage);
-  //   pagedir_clear_page(thread_current()->pagedir, fp->upage);
+  //   // free_frame_from_table(fp->kpage);
+  //   // pagedir_clear_page(thread_current()->pagedir, fp->upage);
   //   free(fp);
   // }
   delete_mfile(mfile);
