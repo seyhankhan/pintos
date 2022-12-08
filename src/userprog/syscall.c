@@ -43,7 +43,7 @@ static void seek (int fd, unsigned position);
 static unsigned tell (int fd);
 static void close (int fd);
 static mapid_t mmap(int fd, void* addr);
-static void munmap(mapid_t mapping);
+
 
 static int get_next_fd(void);
 struct file_wrapper *get_file_by_fd (int fd);
@@ -457,7 +457,7 @@ void munmap (mapid_t mapid) {
   } 
   // printf("Mfile is not null\n");
   // Free all of the pages
-  struct list_elem *elem;
+  // struct list_elem *elem;
   // printf("Before loop List size: %d\n", mfile->num_of_pages);
 
   // for (int i = mfile->num_of_pages; i > 0; i --) {

@@ -15,9 +15,10 @@ void init_mmap(void);
 // struct memory_file *find_memory_file(mapid_t mapid);
 void insert_mfile (mapid_t mapid, struct file *file, struct list *file_pages);
 struct memory_file *get_mfile(mapid_t mapid);
-unsigned hash_mfile (const struct hash_elem *e, void *aux UNUSED);
-bool hash_less_mfile (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 void delete_mfile(struct memory_file *mfile);
+// unsigned hash_mfile (const struct hash_elem *e, void *aux UNUSED);
+// bool hash_less_mfile (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
+
 
 /* File page that will store the upage and kpage addresses of a single page of a mmapped file*/
 struct file_page {
@@ -31,7 +32,8 @@ struct memory_file {
     mapid_t mapid;                   //mapping id for file
     struct file *file;               //file pointer
     struct list *file_pages;          // List of file pages that hold upage and kpage addresses
-    struct hash_elem elem;    //list elemenet
+    struct list_elem elem;    //list elemenet
+    // struct hash_elem elem;    //list elemenet
     int num_of_pages;
 };
 

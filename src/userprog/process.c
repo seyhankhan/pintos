@@ -20,6 +20,7 @@
 #include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -206,7 +207,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
+  
   dec_ref_count(cur->exit_status);
 
   // Closes all opened files
@@ -216,6 +217,12 @@ process_exit (void)
 
   hash_clear(&cur->spt, free_spt_entry);
 
+  // Unmap all memory mapped files
+  struct list_elem *e;
+  while (!list_empty (&cur->memory_mapped_files)) {
+    e = list_begin(&cur->memory_mapped_files);
+    munmap(list_entry(e, struct memory_file, elem)->mapid);
+  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -236,7 +243,7 @@ process_exit (void)
   if (cur->exec_file != NULL) {
     file_allow_write(cur->exec_file);
   }
-  
+  printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   sema_up(&cur->exit_status->sema);
 }
 
