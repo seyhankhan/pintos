@@ -12,6 +12,7 @@
 #include "vm/frame.h"
 #include "threads/palloc.h"
 #include "userprog/syscall.h"
+#include "vm/mmap.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -19,6 +20,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 bool is_stack_access (void *esp, void *addr);
+static bool grow_stack(void *fault_addr);
 
 #define PUSHA_BYTES 32
 #define PUSH_BYTES 4
@@ -129,64 +131,71 @@ kill (struct intr_frame *f)
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 
 static void
-page_fault (struct intr_frame *f) 
-{
-  bool not_present;  /* True: not-present page, false: writing r/o page. */
-  bool write;        /* True: access was write, false: access was read. */
-  bool user;         /* True: access by user, false: access by kernel. */
-  void *fault_addr;  /* Fault address. */
+page_fault (struct intr_frame *f) {
 
-  /* Obtain faulting address, the virtual address that was
-     accessed to cause the fault.  It may point to code or to
-     data.  It is not necessarily the address of the instruction
-     that caused the fault (that's f->eip).
-     See [IA32-v2a] "MOV--Move to/from Control Registers" and
-     [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
-     (#PF)". */
-  asm ("movl %%cr2, %0" : "=r" (fault_addr));
+   bool not_present;  /* True: not-present page, false: writing r/o page. */
+   bool write;        /* True: access was write, false: access was read. */
+   bool user;         /* True: access by user, false: access by kernel. */
+   void *fault_addr;  /* Fault address. */
 
-  /* Turn interrupts back on (they were only off so that we could
-     be assured of reading CR2 before it changed). */
-  intr_enable ();
+   /* Obtain faulting address, the virtual address that was
+      accessed to cause the fault.  It may point to code or to
+      data.  It is not necessarily the address of the instruction
+      that caused the fault (that's f->eip).
+      See [IA32-v2a] "MOV--Move to/from Control Registers" and
+      [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
+      (#PF)". */
+   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
-  /* Count page faults. */
-  page_fault_cnt++;
+   /* Turn interrupts back on (they were only off so that we could
+   be assured of reading CR2 before it changed). */
+   intr_enable ();
 
-  /* Determine cause. */
-  not_present = (f->error_code & PF_P) == 0;
-  write = (f->error_code & PF_W) != 0;
-  user = (f->error_code & PF_U) != 0;
+   /* Count page faults. */
+   page_fault_cnt++;
+
+   /* Determine cause. */
+   not_present = (f->error_code & PF_P) == 0;
+   write = (f->error_code & PF_W) != 0;
+   user = (f->error_code & PF_U) != 0;
 
    struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
-   // printf("About to check: %p\n", fpage);
-   // printf("With Fault Addr: %p\n with stack: %p\n", fault_addr, f->esp);
+
+   /* Writing to a read only page*/
    if (fpage != NULL && write && !fpage->writable) {
       exit(-1);
+      /* If page is found and the address is a valid virtual user address then load it*/
    }
-   if (fpage != NULL && is_user_vaddr(fault_addr)) {
-      // printf("Lazy loading\n");
-      lazy_load_page(fpage);
+    if (fpage != NULL && is_user_vaddr(fault_addr)) {
+      load_page_from_spt(fpage);
       return;
-   } else if (is_stack_access(f->esp, fault_addr)) {
-      // printf("Grow Stack!\n");
-      struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
-      spt_add_page(&thread_current()->spt, new_stack_page);
-      uint8_t *kpage = obtain_free_frame(PAL_USER);
-      if (kpage == NULL){
-         // Ideally this won't be the case as we will evict frames to make space
+   /* If the page fault occured when setting up the stack then grow the stack*/
+   }
+   if (is_stack_access(f->esp, fault_addr)) {
+      if (!grow_stack(fault_addr)) {
          exit(-1);
       }
-      memset (kpage, 0, PGSIZE);
-      // Add the page to the process's address space. 
-      if (!pagedir_set_page(thread_current()->pagedir, new_stack_page->upage, kpage, new_stack_page->writable)) {
-         free_frame_from_table(kpage);
-         exit(-1);
-      }
-      
    } else if (user || not_present) {
       exit(-1);
    }
 
+}
+
+static bool grow_stack(void *fault_addr) {
+   struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
+   spt_add_page(&thread_current()->spt, new_stack_page);
+   uint8_t *kpage = obtain_free_frame(PAL_USER);
+   if (kpage == NULL){
+      // Ideally this won't be the case as we will evict frames to make space
+      return false;
+   }
+   memset (kpage, 0, PGSIZE);
+   // Add the page to the process's address space. 
+   if (!pagedir_set_page(thread_current()->pagedir, new_stack_page->upage, kpage, new_stack_page->writable)) {
+      free_frame_from_table(kpage);
+      return false;
+   }
+   return true;
 }
 
 bool

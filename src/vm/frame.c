@@ -24,7 +24,7 @@ unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED
   return hash_int((unsigned)frame->frame_page_address);
 }
 
-//initialise frame table
+/* Initialise frame table */
 void initialise_frame() {
   lock_init(&lock_on_frame);
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);
@@ -48,7 +48,7 @@ static bool insert_page_into_frame(void *page_to_insert) {
 }
 
 //retrieve page from frame table
-static struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
+struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
   struct frame frame;
   frame.page = page_to_retrieve;
   struct hash_elem *hash_element = hash_find(&frame_table, &frame.hash_elem);

@@ -6,6 +6,7 @@
 #include "vm/frame.h"
 #include "userprog/pagedir.h"
 #include <string.h>
+#include "threads/malloc.h"
 
 
 unsigned hash_func (const struct hash_elem *e, void *aux UNUSED) 
@@ -31,7 +32,7 @@ struct spt_entry *spt_find_addr(const void *addr) {
   }
 }
 
-bool lazy_load_page(struct spt_entry *entry) {
+bool load_page_from_spt(struct spt_entry *entry) {
 
    ASSERT(pg_ofs (entry->upage) == 0);
    ASSERT(entry->ofs % PGSIZE == 0);
@@ -47,15 +48,12 @@ bool lazy_load_page(struct spt_entry *entry) {
    uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
    if (kpage == NULL){
       
-      // if (!load_page(entry))
-      //    return false;
       // Get a new page of memory.
       kpage = obtain_free_frame(PAL_USER);
       if (kpage == NULL){
          // Ideally this won't be the case as we will evict frames to make space
          return false;
       }
-      
       // Add the page to the process's address space. 
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
@@ -86,6 +84,20 @@ struct spt_entry *spt_add_page(struct hash *spt, struct spt_entry *entry) {
     return hash_entry(old, struct spt_entry, hash_elem);
   }
   return NULL;
+}
+
+
+bool spt_delete_page (struct hash *spt, void *page)  {
+   struct spt_entry *e = spt_find_addr(page);
+   if (!e)
+      return false;
+
+   struct hash_elem *he = hash_delete(spt, &e->hash_elem);
+   
+   if (!he) {
+      return false;
+   }
+   return true;
 }
 
 struct spt_entry *create_file_page(struct file *file, void *upage,  
@@ -119,20 +131,4 @@ struct spt_entry *create_zero_page(void *addr, bool writable) {
    page->writable = writable;
 
    return page;
-}
-
-bool load_page(struct spt_entry *page) {
-   // Get a new page of memory.
-   uint8_t *kpage = obtain_free_frame(PAL_USER);
-   if (kpage == NULL){
-      // Ideally this won't be the case as we will evict frames to make space
-      return false;
-   }
-   // Add the page to the process's address space. 
-   if (!pagedir_set_page(thread_current()->pagedir, page->upage, kpage, page->writable)) {
-      free_frame_from_table(kpage);
-      return false; 
-   } 
-
-   return true;
 }

@@ -3,6 +3,13 @@
         "hash.h": "c",
         "debug.h": "c",
         "syscall.h": "c",
-        "palloc.h": "c"
+        "palloc.h": "c",
+        "list.h": "c",
+        "vector": "c",
+        "memory": "c",
+        "optional": "c",
+        "string_view": "c",
+        "system_error": "c",
+        "frame.h": "c"
     }
 }
