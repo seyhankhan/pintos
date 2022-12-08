@@ -454,16 +454,19 @@ void munmap (mapid_t mapid) {
   } 
   // printf("Mfile is not null\n");
   // printf("Start: %p, End: %p\n",mfile->start_addr, mfile->end_addr);
-  
-  for (void *addr = mfile->start_addr; addr < mfile->end_addr; addr+=PGSIZE) {
+  size_t ofs = 0;
+  for (void *addr = mfile->start_addr; addr < mfile->end_addr; addr+=PGSIZE, ofs+=PGSIZE) {
     struct spt_entry *page = spt_find_addr(addr);
     // Check if spt entry exists
     if (page != NULL) {
+      if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
+        // printf("Writing to file\n");
+        file_seek(mfile->file, ofs);
+        off_t n = file_write(mfile->file, page->upage, page->read_bytes);
+        // printf("Written %d bytes\n", n);
+      }
       void *kpage = pagedir_get_page(thread_current()->pagedir, addr);
       if (kpage != NULL) {
-        // if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
-        //   printf("Page has been modified\n");
-        // }
         free_frame_from_table(kpage);
       }
       
