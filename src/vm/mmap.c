@@ -4,10 +4,10 @@
 #include "threads/malloc.h"
 #include "lib/kernel/list.h"
 
-static struct lock lock_on_memory_file;
+static struct lock mfile_lock;
 
 void init_mmap() {
-  lock_init(&lock_on_memory_file); 
+  lock_init(&mfile_lock); 
 }
 
 void insert_mfile (mapid_t mapid, struct file *file, void* start_addr, void* end_addr) {
@@ -16,34 +16,32 @@ void insert_mfile (mapid_t mapid, struct file *file, void* start_addr, void* end
   memory_file->mapid = mapid;
   memory_file->start_addr = start_addr;
   memory_file->end_addr = end_addr;
+  lock_acquire(&mfile_lock);
   list_push_back(&thread_current()->memory_mapped_files, &memory_file->elem);
+  lock_release  (&mfile_lock);
 }
 
 void delete_mfile(struct memory_file *mfile) {
+  lock_acquire(&mfile_lock);
   list_remove(&mfile->elem);
+  lock_release  (&mfile_lock);
   free(mfile);
 }
 
 struct memory_file *get_mfile(mapid_t mapid) {
   struct list_elem *elem;
+  lock_acquire(&mfile_lock);
   elem = list_begin (&thread_current()->memory_mapped_files);
   while (elem != list_end (&thread_current()->memory_mapped_files)) {
     struct memory_file *mfile = list_entry (elem, struct memory_file, elem);
     if (mfile->mapid == mapid) {
+      lock_release  (&mfile_lock);
       return mfile;
     }
     elem = list_next (elem);
   }
+  lock_release(&mfile_lock);
   return NULL;
 }
 
-// unsigned hash_mfile (const struct hash_elem *e, void *aux UNUSED) {
-//   return hash_int(hash_entry(e, struct memory_file, elem)->mapid);
-// }
-// bool hash_less_mfile (const struct hash_elem *a,
-//                              const struct hash_elem *b,
-//                              void *aux UNUSED) {
-//   return hash_entry(a, struct memory_file, elem)->mapid <
-//          hash_entry(b, struct memory_file, elem)->mapid;
-// }
 

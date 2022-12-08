@@ -9,31 +9,18 @@
 //mapping ID for memory mapped files
 typedef int mapid_t;
 
-// void insert_memory_file(mapid_t mapid, int fid, void *start_addr, void *end_addr);
-// bool delete_memory_file(mapid_t mapid);
 void init_mmap(void);
-// struct memory_file *find_memory_file(mapid_t mapid);
 void insert_mfile (mapid_t mapid, struct file *file, void* start_addr, void* end_addr);
 struct memory_file *get_mfile(mapid_t mapid);
 void delete_mfile(struct memory_file *mfile);
-// unsigned hash_mfile (const struct hash_elem *e, void *aux UNUSED);
-// bool hash_less_mfile (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
-
-/* File page that will store the upage and kpage addresses of a single page of a mmapped file*/
-struct file_page {
-    struct list_elem elem;
-    uint8_t *kpage;
-    void *upage;
-    
-};
 
 struct memory_file {
-    mapid_t mapid;                   //mapping id for file
-    struct file *file;               //file pointer
-    struct list_elem elem;    //list elemenet
-    void *start_addr;
-    void *end_addr;
+    mapid_t mapid;          /* Mapping ID - unique identifier of the Mfile*/     
+    struct file *file;      /* Pointer to file that it's holding in memory */
+    struct list_elem elem;  /* List elem to insert into list of memory mapped files*/  
+    void *start_addr;       /* Start User Virtual Address*/
+    void *end_addr;         /* End User virtual Address*/
 };
 
 

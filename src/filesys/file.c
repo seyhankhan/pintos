@@ -183,5 +183,5 @@ unsigned
 file_hash (struct file *file)
 {
    ASSERT (file != NULL);
-   return hash_bytes(file_get_inode(file), sizeof(void *));
+   return hash_ptr(file_get_inode(file));
 }

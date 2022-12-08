@@ -210,6 +210,12 @@ process_exit (void)
   
   dec_ref_count(cur->exit_status);
 
+  // Unmap all memory mapped files
+  struct list_elem *e;
+  while (!list_empty (&cur->memory_mapped_files)) {
+    e = list_begin(&cur->memory_mapped_files);
+    munmap(list_entry(e, struct memory_file, elem)->mapid);
+  }
   // Closes all opened files
   close_all_files();
   // Remove children and free the memory
@@ -217,12 +223,7 @@ process_exit (void)
 
   hash_clear(&cur->spt, free_spt_entry);
 
-  // Unmap all memory mapped files
-  struct list_elem *e;
-  while (!list_empty (&cur->memory_mapped_files)) {
-    e = list_begin(&cur->memory_mapped_files);
-    munmap(list_entry(e, struct memory_file, elem)->mapid);
-  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

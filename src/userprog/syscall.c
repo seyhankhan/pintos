@@ -115,7 +115,7 @@ void exit(int status) {
   }
   // Free mmap files in process exit or here
   cur->exit_status->exit_code = status;
-
+  
   thread_exit();
 }
 
@@ -290,11 +290,6 @@ static int write (int fd, const void *buffer, unsigned length) {
     return 0;
   }
   if (fd == STDOUT_FILENO) {
-    // Writing to the console
-    // returns number of bytes written
-    /* TODO: Keep in mind edge case where number of bytes written
-    is less than size because some were not able to be written. 
-    */
     putbuf(buffer, length);
     length_write = length;
   } else {
@@ -309,78 +304,35 @@ static int write (int fd, const void *buffer, unsigned length) {
   return length_write;
 }
 
-//map the file open denoted by file descriptor fd into process's vaddr space
-// mapid_t mmap(int fd, void* addr) {
-//   size_t file_size = filesize(fd);
-//   struct file* file = file_reopen(get_file_by_fd(fd)->file);
 
-//   //check if file is invalid
-//   if (file == NULL || file_size <= 0) {
-//     return -1;
-//   }
-
-//   //check if address is invalid
-//   if (pg_ofs(addr) != 0 || addr == NULL || addr == 0x0) {
-//     return -1;
-//   }
-  
-//   if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
-//     return -1;
-//   }
-//   void* temp = addr;
-
-//   //check if filelength is multiple of PGSIZE
-//   while (file_size > 0) {
-
-//     size_t read_bytes;
-//     size_t zero_bytes;
-//     size_t ofs = 0;
-
-//     if (file_size >= PGSIZE) {
-//       read_bytes = PGSIZE;
-//       zero_bytes = 0;    
-//     } else {
-//       read_bytes = file_size;
-//       zero_bytes = PGSIZE - file_size;
-//     }
-
-//     // if (find_page(temp) != NULL) {
-//     //   return -1;
-//     // }
-
-//     struct page *page = create_new_file_page(temp, file, ofs, read_bytes, zero_bytes, true);
-
-//     ofs += PGSIZE;
-//     file_size -= read_bytes;
-//     temp += PGSIZE;
-//   }
-//   mapid_t mapid = get_next_mapid();
-//   insert_memory_file(mapid, fd, addr, temp);
-//   return mapid;
-// }
-
+/*Maps the file open as fd into the process’s virtual address space. 
+  The entire file is mapped into consecutive virtual pages starting at addr. */
 mapid_t mmap(int fd, void* addr) {
-  size_t file_size = filesize(fd);
   struct file* file = file_reopen(get_file_by_fd(fd)->file);
+  size_t file_size = file_length(file);
 
-  /*If file is not opened/not valid and filesize <= 0 then return -1*/ 
+  /* If file is not opened/not valid and filesize <= 0 then return -1*/ 
   if (file == NULL || file_size <= 0) {
     return -1;
   }
-  //check if address is invalid
-  if (pg_ofs(addr) != 0 || addr == NULL || addr == 0x0) {
+  
+  /*First check:  Checks if address is page aligned
+    Second check: checks if address is NULL and by extension whether its virtual page 0
+    Third check:  Checks if address is a user virtual address and not a kernel virtual address*/
+  if (pg_ofs(addr) != 0 || addr == NULL || !is_user_vaddr(addr)) {
     return -1;
   }
   
+  /* Checks whether File descriptor passed in is 0 or 1 
+    which are reserved std input and output for */
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
     return -1;
   }
 
-  struct list file_pages;
-  list_init(&file_pages);
   void* temp = addr;
   void* start_addr = addr;
   void* end_addr = addr;
+
   while (file_size > 0) {
 
     size_t read_bytes;
@@ -396,89 +348,83 @@ mapid_t mmap(int fd, void* addr) {
       zero_bytes = PGSIZE - file_size;
     }
     
-
-    // Check if there already exist a loaded page 
+    /* Check if there already exist a loaded kpage */ 
     uint8_t *kpage = pagedir_get_page (thread_current()->pagedir, temp);
-    // If either are the case then return -1 - this address is already mapped
+    /* If there already exist a loaded kpage 
+       then we have an overlap with an already loaded page 
+       be it a zeroed page (stack) or file page */
     if (kpage != NULL)
       return -1;
-    else {
-      kpage = obtain_free_frame(PAL_USER);
-      if (kpage == NULL){
-        return -1;
-      }
-    }
-    // Check if an entry exists in the spt for this address 
+
+    /* If there doesn't exist a loaded kpage it's possible that this page has been loaded lazily
+       So we need to check if there exists an entry in our Supplemental Page Table */ 
     struct spt_entry *loaded = spt_find_addr(temp);
     if (loaded != NULL) {
       return -1;
     }
-    // TODO: Synchronisation and free fps
-    // Lazy Load the page into the spt
-    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
 
+    /* Obtain a free frame*/
+    kpage = obtain_free_frame(PAL_USER);
+    if (kpage == NULL){
+      return -1;
+    }
+
+    /* Create a file SPT entry */
+    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
     if (spt_page == NULL)
       return -1;
-
+    /* Add it to the SPT */
     spt_add_page(&thread_current()->spt, spt_page);
-    // Shouldn't be any overlap
-    // struct spt_entry *overlap = spt_add_page(&thread_current()->spt, spt_page);
-    // if (overlap != NULL)  {
-    //   overlap->writable = overlap->writable || writable;
-    //   overlap->read_bytes += read_bytes;
-    // }
-      
-    // printf("Advancing\n");
+
     /* Advance */
     file_size -= read_bytes;
     ofs += PGSIZE;
     temp += PGSIZE;
     end_addr += read_bytes;
-    // printf("readbytes: %d\n", read_bytes);
   }
-  // printf("Exiting\n");
+  /* Now that we have loaded all the pages lazily into the SPT we can create and add 
+     The Memory Mapped File to our list */
   mapid_t mapid = get_next_mapid();
   insert_mfile(mapid, file, start_addr, end_addr);
-  // printf("List size: %d\n", list_size(&file_pages));
 
   return mapid;
 }
 
 void munmap (mapid_t mapid) {
-  // printf("About to unmap\n");
   struct memory_file *mfile = get_mfile(mapid);
+  /* If no memory mapping exists then exit -1 either due it not being mapped
+     or already being unmapped*/
   if (mfile == NULL) {
-    // printf("Mfile is null\n");
     exit(-1);
-  } 
-  // printf("Mfile is not null\n");
-  // printf("Start: %p, End: %p\n",mfile->start_addr, mfile->end_addr);
+  }
   size_t ofs = 0;
   for (void *addr = mfile->start_addr; addr < mfile->end_addr; addr+=PGSIZE, ofs+=PGSIZE) {
     struct spt_entry *page = spt_find_addr(addr);
-    // Check if spt entry exists
+    /* Check if spt entry exists */
     if (page != NULL) {
+      /* If it does exist then check if the page has been modified since its been added */
       if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
-        // printf("Writing to file\n");
+        /* If it has been modified then write the modified page back to the file*/
         file_seek(mfile->file, ofs);
-        off_t n = file_write(mfile->file, page->upage, page->read_bytes);
-        // file_close(mfile->file);
-        // printf("Written %d bytes\n", n);
+        file_write(mfile->file, page->upage, page->read_bytes);
       }
+      /* Check if the page has actually been loaded into memory*/
       void *kpage = pagedir_get_page(thread_current()->pagedir, addr);
       if (kpage != NULL) {
+        /* If so then free the frame in memory that belongs to that page*/
         free_frame_from_table(kpage);
       }
+      /* Clear the page - sets not_present to true - will pagefault and exit on access*/
       pagedir_clear_page(thread_current()->pagedir, page->upage);
+      /* Remove page from Supplemental Page Table*/
       spt_delete_page(&thread_current()->spt, page->upage);
-      // printf("Cleared page\n");
     }
   }
+  /* Delete the Memory Mapped File from the list - frees the struct also*/
   delete_mfile(mfile);
 }
 
-  
-
+/* Gets the next File Descriptor*/
 static int get_next_fd() {
   static int next_fd = 2;
   int fd;
@@ -486,6 +432,7 @@ static int get_next_fd() {
   return fd;
 }
 
+/* Gets the next Mapped File ID */
 static mapid_t get_next_mapid(void) {
   static mapid_t next_mapid = 0;
   return next_mapid++;
@@ -506,9 +453,6 @@ get_file_by_fd (int fd)
   return NULL;
 }
 
-
-
-
 /* Validate a user's pointer to a virtual address
   must not be
     - null pointer
@@ -524,14 +468,19 @@ bool is_vaddr(const void *uaddr)
     return false;
   if (!is_user_vaddr(uaddr))
     return false;
+  /* Now that we have VM checking if a kpage exists is not enough as a page could've been loaded lazily*/
   if (pagedir_get_page(thread_current()->pagedir, uaddr) == NULL) {
     struct spt_entry temp;
     temp.upage = (void *) uaddr;
+    /* Therefore if it's NULL we have to check if an entry exists in the SPT
+       If there doesn't exist an entry in the SPT either then we are sure this is not
+       a valid address
+    */
     struct hash_elem *elem = hash_find(&t->spt, &temp.hash_elem);
     if (elem == NULL) 
-      exit(-1);
-    volatile char pgfault_byte = *(char*) uaddr;
-    return pagedir_get_page(t->pagedir, uaddr) != NULL;
+      return false;
+    
+    return true;
   }
   return true;
 }
