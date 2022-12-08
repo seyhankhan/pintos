@@ -33,42 +33,45 @@ struct spt_entry *spt_find_addr(const void *addr) {
 }
 
 bool lazy_load_page(struct spt_entry *entry) {
+  ASSERT(pg_ofs(entry->upage) == 0);
+  ASSERT(entry->ofs % PGSIZE == 0);
 
-   ASSERT(pg_ofs (entry->upage) == 0);
-   ASSERT(entry->ofs % PGSIZE == 0);
+  file_seek(entry->file, entry->ofs);
 
-   file_seek (entry->file, entry->ofs);
+  size_t page_read_bytes = entry->read_bytes < PGSIZE ? entry->read_bytes : PGSIZE;
+  size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-   size_t page_read_bytes = entry->read_bytes < PGSIZE ? entry->read_bytes : PGSIZE;
-   size_t page_zero_bytes = PGSIZE - page_read_bytes;
-   
+  // Check if virtual page already allocated
+  struct thread *t = thread_current();
+  uint8_t *kpage = pagedir_get_page(t->pagedir, entry->upage);
+  if (kpage == NULL)
+  {
 
-   // Check if virtual page already allocated 
-   struct thread *t = thread_current ();
-   uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
-   if (kpage == NULL){
-      
-      // if (!load_page(entry))
-      //    return false;
-      // Get a new page of memory.
-      kpage = obtain_free_frame(PAL_USER);
-      if (kpage == NULL){
-         // Ideally this won't be the case as we will evict frames to make space
-         return false;
-      }
-      // Add the page to the process's address space. 
-      if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
-         free_frame_from_table(kpage);
-         return false; 
-      }    
-   } else {
-      
-   //   Check if writable flag for the page should be updated 
-      if(entry->writable && !pagedir_is_writable(t->pagedir, entry->upage)){
-         pagedir_set_writable(t->pagedir, entry->upage, entry->writable); 
-      }
-      
-   }
+    // if (!load_page(entry))
+    //    return false;
+    // Get a new page of memory.
+    kpage = obtain_free_frame(PAL_USER);
+    if (kpage == NULL)
+    {
+      // Ideally this won't be the case as we will evict frames to make space
+      return false;
+    }
+    // Add the page to the process's address space.
+    if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable))
+    {
+      free_frame_from_table(kpage);
+      return false;
+    }
+  }
+  else
+  {
+
+    //   Check if writable flag for the page should be updated
+    if (entry->writable && !pagedir_is_writable(t->pagedir, entry->upage))
+    {
+      pagedir_set_writable(t->pagedir, entry->upage, entry->writable);
+    }
+  }
    //  Load data into the page. 
    if (file_read (entry->file, kpage, page_read_bytes) != (int) page_read_bytes) {
       return false; 
@@ -116,6 +119,7 @@ struct spt_entry *create_file_page(struct file *file, void *upage,
    page->read_bytes = read_bytes;
    page->zero_bytes = zero_bytes;
    page->writable = writable;
+   page->referenced = false;
 
    return page;
 }
@@ -149,6 +153,11 @@ bool load_page(struct spt_entry *page) {
    } 
 
    return true;
+}
+
+void page_replacement(struct thread *t)
+{
+   struct spt_entry *spte = &t->spt;
 }
 
 // struct page* find_page(void *addr) {
