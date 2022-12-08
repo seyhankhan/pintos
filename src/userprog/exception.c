@@ -160,44 +160,38 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
    struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
+   // struct memory_file *mfile = get_mfile();
+   // printf("About to check: %p\n", fpage);
+   // printf("With Fault Addr: %p\n with stack: %p\n", fault_addr, f->esp);
 
-   // if (fpage == NULL || !is_user_vaddr(fault_addr) || not_present) {
-   //    printf("Check Failed\n");
-   //    exit(-1);
-   // }  else if (is_stack_access(f->esp, fault_addr)) {
-   //    printf("Grow Stack!\n");
-   //    if(!grow_stack(fault_addr))
-   //       exit(-1);
-   // } else if (fpage != NULL && write && !fpage->writable) {
-   //    printf("Not writable\n");
+   /* Writing to a read only page*/
+
+   // if (fpage == NULL || !is_user_vaddr(fault_addr) || !not_present) {
+   //    // printf("Check Failed\n");
    //    exit(-1);
    // }
-   // printf("Lazy loading\n");
-   // lazy_load_page(fpage);
-   // /* */
-
 
    if (fpage != NULL && write && !fpage->writable) {
-      printf("Not writable\n");
+      // printf("Not writable\n");
       exit(-1);
    }
    if (fpage != NULL && is_user_vaddr(fault_addr)) {
-      printf("Lazy loading\n");
+      // printf("Lazy loading\n");
       lazy_load_page(fpage);
       return;
       /* If the page fault occured when setting up the stack then grow the stack*/
    } else if (is_stack_access(f->esp, fault_addr)) {
-      printf("Grow Stack!\n");
-      if(!grow_stack(fault_addr)) {
+      // printf("Grow Stack!\n");
+      if (!grow_stack(fault_addr)) {
          exit(-1);
       }
-      
    } else if (user || not_present) {
-      printf("not present\n");
+      // printf("not present\n");
       exit(-1);
    }
 
 }
+
 static bool grow_stack(void *fault_addr) {
    struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
    spt_add_page(&thread_current()->spt, new_stack_page);

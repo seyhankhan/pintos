@@ -471,6 +471,7 @@ void munmap (mapid_t mapid) {
         free_frame_from_table(kpage);
       }
       pagedir_clear_page(thread_current()->pagedir, page->upage);
+      spt_delete_page(&thread_current()->spt, page->upage);
       // printf("Cleared page\n");
     }
   }
