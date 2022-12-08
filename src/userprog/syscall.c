@@ -463,29 +463,17 @@ void munmap (mapid_t mapid) {
         // printf("Writing to file\n");
         file_seek(mfile->file, ofs);
         off_t n = file_write(mfile->file, page->upage, page->read_bytes);
+        // file_close(mfile->file);
         // printf("Written %d bytes\n", n);
       }
       void *kpage = pagedir_get_page(thread_current()->pagedir, addr);
       if (kpage != NULL) {
         free_frame_from_table(kpage);
       }
-      
-      pagedir_clear_page(thread_current()->pagedir, addr);
+      pagedir_clear_page(thread_current()->pagedir, page->upage);
+      // printf("Cleared page\n");
     }
   }
-  // printf("Before loop List size: %d\n", mfile->num_of_pages);
-  // for (int i = mfile->num_of_pages; i > 0; i --) {
-  //   // printf("About to pop\n");
-  //   elem = list_pop_front(mfile->file_pages);
-  //   // Free upage if it exists
-  //   struct file_page *fp = list_entry(elem, struct file_page, elem);
-  //   // printf("kpage: %p\n", fp->kpage);
-  //   // printf("upage: %p\n", fp->upage);
-  //   // printf("During loop List size: %d\n", i);
-  //   // free_frame_from_table(fp->kpage);
-  //   // pagedir_clear_page(thread_current()->pagedir, fp->upage);
-  //   free(fp);
-  // }
   delete_mfile(mfile);
 }
 
