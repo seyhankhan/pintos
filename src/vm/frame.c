@@ -48,7 +48,7 @@ static bool insert_page_into_frame(void *page_to_insert) {
 }
 
 //retrieve page from frame table
-static struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
+struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
   struct frame frame;
   frame.page = page_to_retrieve;
   struct hash_elem *hash_element = hash_find(&frame_table, &frame.hash_elem);

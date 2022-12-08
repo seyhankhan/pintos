@@ -45,28 +45,3 @@ bool hash_less_mfile (const struct hash_elem *a,
          hash_entry(b, struct memory_file, elem)->mapid;
 }
 
-// struct memory_file *find_memory_file(mapid_t mapid) {
-//   struct memory_file memory_file;
-//   struct hash_elem *e;
-
-//   memory_file.mapid = mapid;
-//   e = hash_find (&memory_files_hash, &memory_file.hash_elem);
-
-//   if (e != NULL) {
-//     return hash_entry (e, struct memory_file, hash_elem);
-//   }
-//   return NULL;
-// }
-
-// bool delete_memory_file(mapid_t mapid) {
-//   struct memory_file *memory_file = find_memory_file(mapid);
-//   if (memory_file == NULL)
-//     return false;
-
-//   lock_acquire(&lock_on_memory_file);
-//   list_remove(&memory_file->thread_elem);
-//   free(memory_file);
-//   lock_release(&lock_on_memory_file);
-
-//   return true; 
-// }

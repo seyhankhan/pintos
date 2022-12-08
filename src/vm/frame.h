@@ -24,5 +24,6 @@ void initialise_frame(void);
 void *obtain_free_frame(enum palloc_flags flags);
 void free_frame_from_table(void* page);
 bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address); 
+struct frame *retrieve_page_from_frame(void *page_to_retrieve);
 
 #endif

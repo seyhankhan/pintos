@@ -386,6 +386,7 @@ mapid_t mmap(int fd, void* addr) {
     size_t read_bytes;
     size_t zero_bytes;
     size_t ofs = 0;
+    bool writable = true;
 
     if (file_size >= PGSIZE) {
       read_bytes = PGSIZE;
@@ -419,18 +420,20 @@ mapid_t mmap(int fd, void* addr) {
     fp->kpage = kpage;
     fp->upage = temp;
     list_push_front(&file_pages, &fp->elem);
+    // Lazy Load the page into the spt
+    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
 
-    // Add the page to the process's address space. 
-    if (!pagedir_set_page(thread_current()->pagedir, temp, kpage, true)) {
-        printf("Failed\n");
-        free_frame_from_table(kpage);
-        return false; 
-    } 
+    if (spt_page == NULL)
+      return -1;
 
-    //  Load data into the page. - Currently not lazy loading
-    if (file_read (file, kpage, read_bytes) != (int) read_bytes) {
-        return false; 
-    }   
+    spt_add_page(&thread_current()->spt, spt_page);
+    // Shouldn't be any overlap
+    // struct spt_entry *overlap = spt_add_page(&thread_current()->spt, spt_page);
+    // if (overlap != NULL)  {
+    //   overlap->writable = overlap->writable || writable;
+    //   overlap->read_bytes += read_bytes;
+    // }
+      
     // printf("Advancing\n");
     /* Advance */
     ofs += PGSIZE;
@@ -457,17 +460,18 @@ void munmap (mapid_t mapid) {
   struct list_elem *elem;
   // printf("Before loop List size: %d\n", mfile->num_of_pages);
 
-  for (int i = mfile->num_of_pages; i > 0; i --) {
-    elem = list_pop_front(mfile->file_pages);
-    // Free upage if it exists
-    struct file_page *fp = list_entry(elem, struct file_page, elem);
-    // printf("kpage: %p\n", fp->kpage);
-    // printf("upage: %p\n", fp->upage);
-    // printf("During loop List size: %d\n", list_size(&mfile->file_pages));
-    free_frame_from_table(fp->kpage);
-    pagedir_clear_page(thread_current()->pagedir, fp->upage);
-    free(fp);
-  }
+  // for (int i = mfile->num_of_pages; i > 0; i --) {
+  //   // printf("About to pop\n");
+  //   elem = list_pop_front(mfile->file_pages);
+  //   // Free upage if it exists
+  //   struct file_page *fp = list_entry(elem, struct file_page, elem);
+  //   // printf("kpage: %p\n", fp->kpage);
+  //   // printf("upage: %p\n", fp->upage);
+  //   // printf("During loop List size: %d\n", i);
+  //   free_frame_from_table(fp->kpage);
+  //   pagedir_clear_page(thread_current()->pagedir, fp->upage);
+  //   free(fp);
+  // }
   delete_mfile(mfile);
 }
 

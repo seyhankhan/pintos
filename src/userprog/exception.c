@@ -12,6 +12,7 @@
 #include "vm/frame.h"
 #include "threads/palloc.h"
 #include "userprog/syscall.h"
+#include "vm/mmap.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -158,6 +159,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
    struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
+   // struct memory_file *mfile = get_mfile();
    // printf("About to check: %p\n", fpage);
    // printf("With Fault Addr: %p\n with stack: %p\n", fault_addr, f->esp);
    if (fpage != NULL && write && !fpage->writable) {
