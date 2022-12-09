@@ -505,14 +505,28 @@ bool is_vaddr(const void *uaddr)
 /* Re-entrant locking and unlocking */
 void filesys_lock_acquire() {
   // printf("About to acquire filesys lock\n");
-  if (!lock_held_by_current_thread(&lock_filesys)) {
-    lock_acquire(&lock_filesys);
-  }
+  lock_acquire(&lock_filesys);
 }
 
 void filesys_lock_release() {
   // printf("About to release filesys lock\n");
+  lock_release(&lock_filesys);
+}
+
+bool try_filesys_lock_acquire() {
+  // printf("About to acquire filesys lock\n");
+  if (!lock_held_by_current_thread(&lock_filesys)) {
+    lock_acquire(&lock_filesys);
+    return true;
+  }
+  return false;
+}
+
+bool try_filesys_lock_release() {
+  // printf("About to release filesys lock\n");
   if (lock_held_by_current_thread(&lock_filesys)) {
     lock_release(&lock_filesys);
+    return true;
   }
+  return false;
 }

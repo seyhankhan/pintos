@@ -79,13 +79,17 @@ bool load_page_from_spt(struct spt_entry *entry) {
    if (entry->zero_bytes == PGSIZE) {
       memset(kpage, 0, page_zero_bytes);
    } else {
-      filesys_lock_acquire(); 
+      bool release = try_filesys_lock_acquire(); 
       file_seek(entry->file, entry->ofs);
       if (file_read(entry->file, kpage, page_read_bytes) != (int)page_read_bytes) {
-         filesys_lock_release();
-      return false;
+         if (release) {
+            filesys_lock_release();
+         }
+         return false;
       }
-      filesys_lock_release();
+      if (release) {
+         filesys_lock_release();
+      }
       memset(kpage + page_read_bytes, 0, page_zero_bytes);
    }
    // lock_release(&spt_lock);
