@@ -31,12 +31,20 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "devices/swap.h"
+#include "vm/mmap.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#ifdef VM
+#include "vm/frame.h"
+#endif
+
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -127,6 +135,15 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
+#ifdef VM
+  /* Initialise the swap disk */  
+  swap_init ();
+  /* Initialise Frame Table*/
+  initialise_frame();
+  /* Initialise Memory Mapped File structs*/
+  init_mmap_lock();
+  init_page_lock();
+#endif
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
