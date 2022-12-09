@@ -24,6 +24,7 @@ static bool grow_stack(void *fault_addr);
 
 #define PUSHA_BYTES 32
 #define PUSH_BYTES 4
+#define MAX_STACK_SIZE (1<<23)
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -191,5 +192,6 @@ static bool grow_stack(void *fault_addr) {
 bool
 is_stack_access (void *esp, void *addr)
 {
-  return (is_user_vaddr(addr) && (addr >= (esp - PUSHA_BYTES) || addr >= (esp - PUSH_BYTES)));
+  return (is_user_vaddr(addr) && (addr >= (esp - PUSHA_BYTES) 
+         || addr >= (esp - PUSH_BYTES)) && (PHYS_BASE - addr <= MAX_STACK_SIZE));
 }
