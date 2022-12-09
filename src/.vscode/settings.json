@@ -10,6 +10,8 @@
         "optional": "c",
         "string_view": "c",
         "system_error": "c",
-        "frame.h": "c"
+        "frame.h": "c",
+        "thread.h": "c",
+        "synch.h": "c"
     }
 }

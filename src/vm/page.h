@@ -5,27 +5,18 @@
 #include "lib/kernel/hash.h"
 #include "lib/debug.h"
 
-struct page {
-    struct frame* frame;        // frame associated with this page
-    void* addr;                 // page's virtual address
-    bool can_write;             // whether we can write to this page or not
-    struct list_elem list_elem;  // list element for page
-    struct spt_entry* data;     // holds file data
-    uint32_t pagedir;
-    bool is_loaded;
-    void* kpage;
-};
-
 
 struct spt_entry {
     struct hash_elem hash_elem;
-
     struct file *file;
     off_t ofs;
     uint8_t *upage;
     uint32_t read_bytes;
     uint32_t zero_bytes;
     bool writable;
+    int swap_index;
+    bool is_swapped;
+    bool is_mmap;
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
@@ -35,7 +26,8 @@ struct spt_entry *spt_find_addr(const void *addr);
 struct spt_entry *spt_add_page(struct hash *spt, struct spt_entry *entry);
 bool spt_delete_page (struct hash *spt, void *page);
 struct spt_entry *create_file_page(struct file *file, void *upage,  off_t ofs, 
-                                   size_t read_bytes,size_t zero_bytes, bool writable);
+                                   size_t read_bytes,size_t zero_bytes, bool writable, bool is_mmap);
 struct spt_entry *create_zero_page(void *addr, bool writable);
+void init_page_lock(void);
 
 #endif 

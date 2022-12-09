@@ -512,69 +512,6 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
-
-/*static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
-{
-  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
-  ASSERT (pg_ofs (upage) == 0);
-  ASSERT (ofs % PGSIZE == 0);
-
-  file_seek (file, ofs);
-  while (read_bytes > 0 || zero_bytes > 0) 
-    {
-       Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. 
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
-      // Check if virtual page already allocated 
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      //uint8_t *kpage = obtain_free_frame(PAL_USER);
-      
-      if (kpage == NULL){
-        
-        // Get a new page of memory.
-        kpage = obtain_free_frame(PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-         Add the page to the process's address space. 
-        // if (!install_page (upage, kpage, writable)) 
-        {
-          //palloc_free_page (kpage);
-          free_frame_from_table(kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        Check if writable flag for the page should be updated 
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-        
-      }
-
-       Load data into the page. 
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
-        free_frame_from_table(kpage);
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-       Advance. 
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-    }
-  return true;
-}*/
-
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
@@ -590,7 +527,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       struct thread *t = thread_current();
-      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable);
+      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable, false);
 
       if (pagedata == NULL)
         return false;
@@ -620,8 +557,7 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  kpage = obtain_free_frame(PAL_USER | PAL_ZERO);
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

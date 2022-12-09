@@ -6,7 +6,7 @@
 
 static struct lock mfile_lock;
 
-void init_mmap() {
+void init_mmap_lock() {
   lock_init(&mfile_lock); 
 }
 
