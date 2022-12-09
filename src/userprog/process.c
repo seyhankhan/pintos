@@ -590,7 +590,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       struct thread *t = thread_current();
-      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable);
+      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable, false);
 
       if (pagedata == NULL)
         return false;

@@ -64,6 +64,7 @@ bool load_page_from_spt(struct spt_entry *entry) {
       /* If entry is zero page create zero page - when eviciting don't write to swap*/
       /* If entry is swapped and file that was dirty,set_dirty bit again - need to store it for spte*/
       // Add the page to the process's address space.
+
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
          // lock_release(&spt_lock);
@@ -79,6 +80,12 @@ bool load_page_from_spt(struct spt_entry *entry) {
    if (entry->zero_bytes == PGSIZE) {
       memset(kpage, 0, page_zero_bytes);
    } else {
+      if (entry->is_swapped) {
+         swap_in (kpage, entry->swap_index);
+         pagedir_set_dirty(t->pagedir, entry->upage, true);
+         pagedir_set_accessed (thread_current()->pagedir, entry->upage, true);
+         return true;
+      }
       bool release = try_filesys_lock_acquire(); 
       file_seek(entry->file, entry->ofs);
       if (file_read(entry->file, kpage, page_read_bytes) != (int)page_read_bytes) {
@@ -128,7 +135,7 @@ bool spt_delete_page(struct hash *spt, void *page)
 
 struct spt_entry *create_file_page(struct file *file, void *upage,
                                    off_t ofs, size_t read_bytes,
-                                   size_t zero_bytes, bool writable)
+                                   size_t zero_bytes, bool writable, bool is_mmap)
 {
    struct spt_entry *page = malloc(sizeof(struct spt_entry));
 
@@ -142,6 +149,7 @@ struct spt_entry *create_file_page(struct file *file, void *upage,
    page->zero_bytes = zero_bytes;
    page->writable = writable;
    page->is_swapped = false;
+   page->is_mmap = is_mmap;
    return page;
 }
 

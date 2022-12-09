@@ -16,6 +16,7 @@ struct spt_entry {
     bool writable;
     int swap_index;
     bool is_swapped;
+    bool is_mmap;
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);
@@ -25,7 +26,7 @@ struct spt_entry *spt_find_addr(const void *addr);
 struct spt_entry *spt_add_page(struct hash *spt, struct spt_entry *entry);
 bool spt_delete_page (struct hash *spt, void *page);
 struct spt_entry *create_file_page(struct file *file, void *upage,  off_t ofs, 
-                                   size_t read_bytes,size_t zero_bytes, bool writable);
+                                   size_t read_bytes,size_t zero_bytes, bool writable, bool is_mmap);
 struct spt_entry *create_zero_page(void *addr, bool writable);
 void init_page_lock(void);
 

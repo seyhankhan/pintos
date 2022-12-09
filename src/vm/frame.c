@@ -57,17 +57,15 @@ void free_frame_from_table(void* page_to_free) {
 void *get_free_frame(enum palloc_flags flags) {
   void *free_page_to_obtain = palloc_get_page(flags);
   if (free_page_to_obtain != NULL) {
-    insert_frame_into_table(free_page_to_obtain);
-  } else {
-    exit(-1);
-    // NEED TO IMPLEMENT EVICTION STRATEGY HERE
-    
-    // At the moment will never reach here
-    return evict_frame()->kpage;
-    // return get_free_frame(flags);
-    //PANIC("need to implement eviction");
-  }
-  return free_page_to_obtain;
+    return insert_frame_into_table(free_page_to_obtain)->kpage;
+  } 
+  // exit(-1);
+  // NEED TO IMPLEMENT EVICTION STRATEGY HERE
+  
+  // At the moment will never reach here
+  return evict_frame()->kpage;
+  // return get_free_frame(flags);
+  //PANIC("need to implement eviction");
 }
 
 
@@ -121,7 +119,7 @@ static struct frame *evict_frame() {
   lock_acquire(&lock_on_frame);
   lock_acquire(&lock_eviction);
 
-  while (frame_to_be_evicted == NULL) {
+  if (frame_to_be_evicted == NULL) {
     // printf("Frame to be evicted is NULL\n");
 		struct frame *frame = get_next_frame_for_eviction();
     ASSERT (frame != NULL);
@@ -136,8 +134,19 @@ static struct frame *evict_frame() {
   /* If entry is mmap - write back to file - don't write to swap */
   /* If entry is zero page (zero-bytes = PGSIZE) - don't write to swap)*/
   /* If page is dirty, swap out and add reference to spte that it was dirty to set it again when swapping in*/
-  entry->swap_index = swap_out(frame_to_be_evicted->upage);
-  entry->is_swapped = true;
+  if (pagedir_is_dirty(thread_current()->pagedir, entry->upage)){
+    if (entry->is_mmap) {
+      /* If it has been modified then write the modified page back to the file*/
+      // printf("munmap\n");
+      filesys_lock_acquire();
+      file_seek(entry->file, entry->ofs);
+      file_write(entry->file, entry->upage, entry->read_bytes);
+      filesys_lock_release();
+    } else {
+      entry->swap_index = swap_out(frame_to_be_evicted->upage);
+      entry->is_swapped = true;
+    }
+  }
   pagedir_clear_page(thread_current()->pagedir, entry->upage);
   return frame_to_be_evicted;
 }
@@ -165,6 +174,7 @@ static struct frame *get_next_frame_for_eviction() {
     }
     found = true;
   }
+  victim_frame->reference_bit = true;
   return victim_frame;
 }
 

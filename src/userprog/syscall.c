@@ -376,14 +376,8 @@ mapid_t mmap(int fd, void* addr) {
       return -1;
     }
 
-    /* Obtain a free frame*/
-    kpage = get_free_frame(PAL_USER);
-    if (kpage == NULL){
-      return -1;
-    }
-
     /* Create a file SPT entry */
-    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
+    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable, true);
     if (spt_page == NULL)
       return -1;
     /* Add it to the SPT */
