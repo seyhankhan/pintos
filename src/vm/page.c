@@ -60,6 +60,9 @@ bool load_page_from_spt(struct spt_entry *entry) {
          // lock_release(&spt_lock);
          return false;
       }
+      /* If entry is swapped and (mmap or read only) then read back from file*/
+      /* If entry is zero page create zero page - when eviciting don't write to swap*/
+      /* If entry is swapped and file that was dirty,set_dirty bit again - need to store it for spte*/
       // Add the page to the process's address space.
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);

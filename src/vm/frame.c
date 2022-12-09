@@ -15,14 +15,15 @@ static struct lock lock_on_frame;
 static struct lock lock_eviction;
 
 static struct list frames_for_eviction;
-static struct list_elem *next;
+static struct list_elem *victim_elem;
 
-static void evict_frame(void);
+static struct frame *evict_frame(void);
 static struct frame *get_next_frame_for_eviction(void);
 static void eviction_move_next(void);
-static void evict_frame(void);
 static bool remove_frame_from_table(void *page_to_delete);
-static bool insert_frame_into_table(void *page_to_insert);
+static struct frame *insert_frame_into_table(void *page_to_insert);
+
+
 // static bool look_through_flip_if_necessary(struct frame *vf);
 
 //compares keys in both hash_elems
@@ -57,13 +58,12 @@ void *get_free_frame(enum palloc_flags flags) {
   void *free_page_to_obtain = palloc_get_page(flags);
   if (free_page_to_obtain != NULL) {
     insert_frame_into_table(free_page_to_obtain);
-    get_frame_from_table(free_page_to_obtain);
   } else {
     exit(-1);
     // NEED TO IMPLEMENT EVICTION STRATEGY HERE
     
     // At the moment will never reach here
-    evict_frame();
+    return evict_frame()->kpage;
     // return get_free_frame(flags);
     //PANIC("need to implement eviction");
   }
@@ -74,16 +74,18 @@ void *get_free_frame(enum palloc_flags flags) {
 /* Helper functions for fetching, inserting and removing frames from table*/
 //add page to frame table
 //returns true on success
-static bool insert_frame_into_table(void *page_to_insert) {
+static struct frame *insert_frame_into_table(void *page_to_insert) {
   struct frame *frame = (struct frame *) malloc(sizeof (struct frame));
   if (frame == NULL) {
-    return false;
+    return NULL;
   }  
   lock_acquire(&lock_on_frame);
   hash_insert(&frame_table, &frame->hash_elem);
   lock_release(&lock_on_frame); 
   frame->kpage = page_to_insert;
-  return true;
+  frame->is_pinned = false;
+  frame->reference_bit = true;
+  return frame;
 }
 
 //retrieve page from frame table
@@ -112,50 +114,66 @@ static bool remove_frame_from_table(void *page_to_delete) {
 
 
 //clock second chance variant. circular linked list
-static void evict_frame() {
-  printf("Evicting frame\n");
+static struct frame *evict_frame() {
+  // printf("Evicting frame\n");
   struct frame *frame_to_be_evicted = NULL;
   
   lock_acquire(&lock_on_frame);
   lock_acquire(&lock_eviction);
 
   while (frame_to_be_evicted == NULL) {
-    printf("Frame to be evicted is NULL\n");
+    // printf("Frame to be evicted is NULL\n");
 		struct frame *frame = get_next_frame_for_eviction();
     ASSERT (frame != NULL);
-    //move on id frame is pinned or accessed
-    if (frame->is_pinned /* Or accessed */) {
-      eviction_move_next();
-  	  continue;  
-    }    
     frame_to_be_evicted = frame;
-    printf("Found a frame\n");
+    // printf("Found a frame\n");
   }
   lock_release(&lock_on_frame);
   lock_release(&lock_eviction);
-  printf("Freeing frame from table: %p\n", frame_to_be_evicted->kpage);
+  // printf("Freeing frame from table: %p\n", frame_to_be_evicted->kpage);
   struct spt_entry *entry = spt_find_addr(frame_to_be_evicted->upage);
+  /* If entry is read only - don't write to swap just evict - file can be read again*/
+  /* If entry is mmap - write back to file - don't write to swap */
+  /* If entry is zero page (zero-bytes = PGSIZE) - don't write to swap)*/
+  /* If page is dirty, swap out and add reference to spte that it was dirty to set it again when swapping in*/
   entry->swap_index = swap_out(frame_to_be_evicted->upage);
+  entry->is_swapped = true;
+  pagedir_clear_page(thread_current()->pagedir, entry->upage);
+  return frame_to_be_evicted;
 }
 
 
 /* Eviction Functions*/
 
 static struct frame *get_next_frame_for_eviction() {
-	if (next == NULL || next == list_end(&frames_for_eviction)) {
-  	next = list_begin(&frames_for_eviction);
+	if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
+  	victim_elem = list_begin(&frames_for_eviction);
   }
   //get frame struct from frame list
-  struct frame *vf = list_entry(next, struct frame, list_elem);
-  return vf;
+  struct frame *victim_frame;
+  bool found = false;
+  while (!found) {
+    victim_frame = list_entry(victim_elem, struct frame, list_elem);
+    if (victim_frame->is_pinned) {
+      eviction_move_next();
+      continue;
+    }
+    if (victim_frame->reference_bit) {
+      victim_frame->reference_bit = false;
+      eviction_move_next();
+      continue;
+    }
+    found = true;
+  }
+  return victim_frame;
 }
 
 /* move position of next in frames_for_eviction */
 static void eviction_move_next() {
-  if (next == NULL || next == list_end(&frames_for_eviction)) {
-    next = list_begin(&frames_for_eviction);
+  if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
+    victim_elem = list_begin(&frames_for_eviction);
   } else {
-    next = list_next(next);
+    victim_elem = list_next(victim_elem);
   }
 }
 
