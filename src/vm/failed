@@ -1,0 +1,9 @@
+make build/tests/vm/pt-overflowstk.result
+make build/tests/vm/page-linear.result
+make build/tests/vm/page-parallel.result
+make build/tests/vm/page-merge-seq.result
+make build/tests/vm/page-merge-par.result
+make build/tests/vm/page-merge-stk.result
+make build/tests/vm/page-merge-mm.result
+make build/tests/filesys/base/syn-read.result
+make build/tests/filesys/base/syn-write.result

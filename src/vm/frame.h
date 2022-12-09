@@ -13,7 +13,6 @@ struct frame {
     struct hash_elem hash_elem;                   // hash entry for frame table
     struct thread *thread;                        // thread that owns frame 
     struct lock lock;                             // allows synchronisation of frame processes 
-    void *page;                                   // pointer to page occupying frame
     uint32_t *page_table_entry;                   // frame's page's page table entry
     struct list_elem list_elem;                   // frame list's list elem
     bool is_pinned;                               // boolean check whether frame is pinned or not

@@ -45,7 +45,6 @@ void initialise_frame() {
 //add page to frame table
 //returns true on success
 static bool insert_page_into_frame(void *page_to_insert) {
-
   struct frame *frame = (struct frame *) malloc(sizeof (struct frame));
   if (frame == NULL) {
     return false;
@@ -53,7 +52,7 @@ static bool insert_page_into_frame(void *page_to_insert) {
   lock_acquire(&lock_on_frame);
   hash_insert(&frame_table, &frame->hash_elem);
   lock_release(&lock_on_frame); 
-  frame->page = page_to_insert;
+  frame->frame_page_address = page_to_insert;
   frame->thread = thread_current();
 
   return true;
@@ -62,7 +61,7 @@ static bool insert_page_into_frame(void *page_to_insert) {
 //retrieve page from frame table
 struct frame *retrieve_page_from_frame(void *page_to_retrieve) {
   struct frame frame;
-  frame.page = page_to_retrieve;
+  frame.frame_page_address = page_to_retrieve;
   struct hash_elem *hash_element = hash_find(&frame_table, &frame.hash_elem);
   if (hash_element != NULL) {
     return hash_entry(hash_element, struct frame, hash_elem);
@@ -100,7 +99,7 @@ void *obtain_free_frame(enum palloc_flags flags) {
     // NEED TO IMPLEMENT EVICTION STRATEGY HERE
     
     evict_frame();
-    
+    return obtain_free_frame(flags);
     //PANIC("need to implement eviction");
   }
   return free_page_to_obtain;
@@ -108,12 +107,14 @@ void *obtain_free_frame(enum palloc_flags flags) {
 
 //clock second chance variant. circular linked list
 static void evict_frame() {
+  printf("Evicting frame\n");
   struct frame *frame_to_be_evicted = NULL;
   
   lock_acquire(&lock_on_frame);
   lock_acquire(&lock_eviction);
 
   while (frame_to_be_evicted == NULL) {
+    printf("Frame to be evicted is NULL\n");
 		struct frame *frame = get_next_frame_for_eviction();
     ASSERT (frame != NULL);
 
@@ -123,12 +124,13 @@ static void evict_frame() {
   	  continue;  
     }    
     frame_to_be_evicted = frame;
+    printf("Found a frame\n");
   }
 
   lock_release(&lock_on_frame);
   lock_release(&lock_eviction);
-
-  //need to free everything
+  printf("Freeing frame from table: %p\n", frame_to_be_evicted->frame_page_address);
+  free_frame_from_table(frame_to_be_evicted->frame_page_address);
   
 }
 

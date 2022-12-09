@@ -20,7 +20,6 @@ struct page {
 
 struct spt_entry {
     struct hash_elem hash_elem;
-
     struct file *file;
     off_t ofs;
     uint8_t *upage;
