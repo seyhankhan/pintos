@@ -10,6 +10,7 @@
 #include "hash.h"
 #include "userprog/syscall.h"
 #include "devices/swap.h"
+#include "stdio.h"
 
 static struct lock spt_lock;
 
@@ -44,7 +45,7 @@ bool load_page_from_spt(struct spt_entry *entry) {
    ASSERT(pg_ofs (entry->upage) == 0);
    ASSERT(entry->ofs % PGSIZE == 0);
    // lock_acquire(&spt_lock);
-
+   // printf("Loading upage: %p\n", entry->upage);
    size_t page_read_bytes = entry->read_bytes < PGSIZE ? entry->read_bytes : PGSIZE;
    size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
@@ -52,10 +53,14 @@ bool load_page_from_spt(struct spt_entry *entry) {
    struct thread *t = thread_current ();
    uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
    if (kpage == NULL){
+      // printf("kpage is null\n");
       // Get a new page of memory.
-      kpage = get_free_frame(PAL_USER);
+      kpage = get_free_frame(*entry);
+      // get_frame_from_table(kpage)->spte = entry; 
       if (kpage == NULL)
       {
+
+         // printf("Couldn't get frame\n");
          // Ideally this won't be the case as we will evict frames to make space
          // lock_release(&spt_lock);
          return false;
@@ -68,22 +73,25 @@ bool load_page_from_spt(struct spt_entry *entry) {
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
          // lock_release(&spt_lock);
+         // printf("failed to set page\n");
          return false;
       }
+
    } else {
       //   Check if writable flag for the page should be updated
       if (entry->writable && !pagedir_is_writable(t->pagedir, entry->upage)) {
          pagedir_set_writable(t->pagedir, entry->upage, entry->writable);
       }
    }
+   // printf("Entry zero bytes: %d\n", entry->zero_bytes);
    //  Load data into the page.
    if (entry->zero_bytes == PGSIZE) {
+      // printf("Zero page\n");
       memset(kpage, 0, page_zero_bytes);
    } else {
       if (entry->is_swapped) {
          swap_in (kpage, entry->swap_index);
          pagedir_set_dirty(t->pagedir, entry->upage, true);
-         pagedir_set_accessed (thread_current()->pagedir, entry->upage, true);
          return true;
       }
       bool release = try_filesys_lock_acquire(); 
@@ -99,10 +107,9 @@ bool load_page_from_spt(struct spt_entry *entry) {
       }
       memset(kpage + page_read_bytes, 0, page_zero_bytes);
    }
-   // lock_release(&spt_lock);
+   // printf("Added upage: %p\n",get_frame_from_table(kpage)->spte->upage);
 
-   pagedir_set_dirty (thread_current()->pagedir, entry->upage, false);
-   pagedir_set_accessed (thread_current()->pagedir, entry->upage, true);
+   // lock_release(&spt_lock);
 
    return true;
 }

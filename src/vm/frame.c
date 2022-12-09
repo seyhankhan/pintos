@@ -54,16 +54,22 @@ void free_frame_from_table(void* page_to_free) {
 }
 
 /* Gets a free frame, if no free frames available evicts frame and returns free frame */
-void *get_free_frame(enum palloc_flags flags) {
-  void *free_page_to_obtain = palloc_get_page(flags);
+void *get_free_frame(struct spt_entry entry) {
+  void *free_page_to_obtain = palloc_get_page(PAL_USER);
   if (free_page_to_obtain != NULL) {
-    return insert_frame_into_table(free_page_to_obtain)->kpage;
+    struct frame *f = insert_frame_into_table(free_page_to_obtain);
+    f->pagedir = thread_current()->pagedir;
+    f->upage = entry.upage;
+    return f->kpage;
   } 
   // exit(-1);
   // NEED TO IMPLEMENT EVICTION STRATEGY HERE
   
   // At the moment will never reach here
-  return evict_frame()->kpage;
+  struct frame *f = evict_frame();
+  f->pagedir = thread_current()->pagedir;
+  f->upage = entry.upage;
+  return f->kpage;
   // return get_free_frame(flags);
   //PANIC("need to implement eviction");
 }
@@ -79,10 +85,10 @@ static struct frame *insert_frame_into_table(void *page_to_insert) {
   }  
   lock_acquire(&lock_on_frame);
   hash_insert(&frame_table, &frame->hash_elem);
+  list_push_back(&frames_for_eviction, &frame->list_elem);
   lock_release(&lock_on_frame); 
   frame->kpage = page_to_insert;
   frame->is_pinned = false;
-  frame->reference_bit = true;
   return frame;
 }
 
@@ -129,12 +135,12 @@ static struct frame *evict_frame() {
   lock_release(&lock_on_frame);
   lock_release(&lock_eviction);
   // printf("Freeing frame from table: %p\n", frame_to_be_evicted->kpage);
-  struct spt_entry *entry = spt_find_addr(frame_to_be_evicted->upage);
+  struct spt_entry *entry = pagedir_get_page(frame_to_be_evicted->pagedir, frame_to_be_evicted->upage);
   /* If entry is read only - don't write to swap just evict - file can be read again*/
   /* If entry is mmap - write back to file - don't write to swap */
   /* If entry is zero page (zero-bytes = PGSIZE) - don't write to swap)*/
   /* If page is dirty, swap out and add reference to spte that it was dirty to set it again when swapping in*/
-  if (pagedir_is_dirty(thread_current()->pagedir, entry->upage)){
+  if (pagedir_is_dirty(frame_to_be_evicted->pagedir, entry->upage)){
     if (entry->is_mmap) {
       /* If it has been modified then write the modified page back to the file*/
       // printf("munmap\n");
@@ -143,11 +149,11 @@ static struct frame *evict_frame() {
       file_write(entry->file, entry->upage, entry->read_bytes);
       filesys_lock_release();
     } else {
-      entry->swap_index = swap_out(frame_to_be_evicted->upage);
+      entry->swap_index = swap_out(frame_to_be_evicted->kpage);
       entry->is_swapped = true;
     }
   }
-  pagedir_clear_page(thread_current()->pagedir, entry->upage);
+  pagedir_clear_page(frame_to_be_evicted->pagedir, entry->upage);
   return frame_to_be_evicted;
 }
 
@@ -167,22 +173,26 @@ static struct frame *get_next_frame_for_eviction() {
       eviction_move_next();
       continue;
     }
-    if (victim_frame->reference_bit) {
-      victim_frame->reference_bit = false;
+    // printf("Has page: %pd\n",pagedir_get_page(thread_current()->pagedir, victim_frame->));
+    void *upage = victim_frame->upage;
+    if (pagedir_is_accessed(victim_frame->pagedir, upage)) {
+      pagedir_set_accessed(victim_frame->pagedir, upage, false);
       eviction_move_next();
       continue;
     }
     found = true;
   }
-  victim_frame->reference_bit = true;
   return victim_frame;
 }
 
 /* move position of next in frames_for_eviction */
 static void eviction_move_next() {
+
   if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
+    // printf("Victim: %p\n", victim_elem);
     victim_elem = list_begin(&frames_for_eviction);
   } else {
+    // printf("Next\n");
     victim_elem = list_next(victim_elem);
   }
 }
