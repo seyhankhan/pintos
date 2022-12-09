@@ -44,10 +44,6 @@ bool load_page_from_spt(struct spt_entry *entry) {
    ASSERT(entry->ofs % PGSIZE == 0);
    // lock_acquire(&spt_lock);
 
-   filesys_lock_acquire();
-   file_seek(entry->file, entry->ofs);
-   filesys_lock_release();
-
    size_t page_read_bytes = entry->read_bytes < PGSIZE ? entry->read_bytes : PGSIZE;
    size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
@@ -76,16 +72,22 @@ bool load_page_from_spt(struct spt_entry *entry) {
       }
    }
    //  Load data into the page.
-   filesys_lock_acquire();
-   if (file_read(entry->file, kpage, page_read_bytes) != (int)page_read_bytes) {
-      filesys_lock_release();
+   if (entry->zero_bytes == PGSIZE) {
+      memset(kpage, 0, page_zero_bytes);
+   } else {
+      filesys_lock_acquire(); 
+      file_seek(entry->file, entry->ofs);
+      if (file_read(entry->file, kpage, page_read_bytes) != (int)page_read_bytes) {
+         filesys_lock_release();
       return false;
+      }
+      filesys_lock_release();
+      memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
    }
-   filesys_lock_release();
    // lock_release(&spt_lock);
 
    // Fill the rest of the page with zeros
-   memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
    return true;
 }
@@ -146,6 +148,7 @@ struct spt_entry *create_zero_page(void *addr, bool writable)
    page->file = NULL;
    page->upage = addr;
    page->ofs = 0;
+   page->read_bytes = 0;
    page->zero_bytes = PGSIZE;
    page->writable = writable;
 
