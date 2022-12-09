@@ -533,12 +533,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       // Check if virtual page already allocated 
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      //uint8_t *kpage = obtain_free_frame(PAL_USER);
+      //uint8_t *kpage = get_free_frame(PAL_USER);
       
       if (kpage == NULL){
         
         // Get a new page of memory.
-        kpage = obtain_free_frame(PAL_USER);
+        kpage = get_free_frame(PAL_USER);
         if (kpage == NULL){
           return false;
         }
@@ -621,7 +621,7 @@ setup_stack (void **esp)
   bool success = false;
 
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  kpage = obtain_free_frame(PAL_USER | PAL_ZERO);
+  kpage = get_free_frame(PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

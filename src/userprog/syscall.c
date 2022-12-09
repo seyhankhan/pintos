@@ -377,7 +377,7 @@ mapid_t mmap(int fd, void* addr) {
     }
 
     /* Obtain a free frame*/
-    kpage = obtain_free_frame(PAL_USER);
+    kpage = get_free_frame(PAL_USER);
     if (kpage == NULL){
       return -1;
     }

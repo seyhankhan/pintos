@@ -9,6 +9,7 @@
 #include "threads/malloc.h"
 #include "hash.h"
 #include "userprog/syscall.h"
+#include "devices/swap.h"
 
 static struct lock spt_lock;
 
@@ -52,7 +53,7 @@ bool load_page_from_spt(struct spt_entry *entry) {
    uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
    if (kpage == NULL){
       // Get a new page of memory.
-      kpage = obtain_free_frame(PAL_USER);
+      kpage = get_free_frame(PAL_USER);
       if (kpage == NULL)
       {
          // Ideally this won't be the case as we will evict frames to make space
@@ -83,11 +84,11 @@ bool load_page_from_spt(struct spt_entry *entry) {
       }
       filesys_lock_release();
       memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
    }
    // lock_release(&spt_lock);
 
-   // Fill the rest of the page with zeros
+   pagedir_set_dirty (thread_current()->pagedir, entry->upage, false);
+   pagedir_set_accessed (thread_current()->pagedir, entry->upage, true);
 
    return true;
 }
@@ -133,8 +134,7 @@ struct spt_entry *create_file_page(struct file *file, void *upage,
    page->read_bytes = read_bytes;
    page->zero_bytes = zero_bytes;
    page->writable = writable;
-   page->referenced = false;
-
+   page->is_swapped = false;
    return page;
 }
 
@@ -151,6 +151,6 @@ struct spt_entry *create_zero_page(void *addr, bool writable)
    page->read_bytes = 0;
    page->zero_bytes = PGSIZE;
    page->writable = writable;
-
+   page->is_swapped = false;
    return page;
 }

@@ -185,7 +185,7 @@ static bool grow_stack(void *fault_addr) {
    struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
    spt_add_page(&thread_current()->spt, new_stack_page);
    load_page_from_spt(new_stack_page);
-   // uint8_t *kpage = obtain_free_frame(PAL_USER);
+   // uint8_t *kpage = get_free_frame(PAL_USER);
    // if (kpage == NULL){
    //    // Ideally this won't be the case as we will evict frames to make space
    //    return false;

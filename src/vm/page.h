@@ -5,18 +5,6 @@
 #include "lib/kernel/hash.h"
 #include "lib/debug.h"
 
-struct page {
-    struct frame* frame;        // frame associated with this page
-    void* addr;                 // page's virtual address
-    bool can_write;             // whether we can write to this page or not
-    struct list_elem list_elem;  // list element for page
-    struct spt_entry* data;     // holds file data
-    uint32_t pagedir;
-    bool is_loaded;
-    void* kpage;
-    struct list_elem frame_elem;            
-};
-
 
 struct spt_entry {
     struct hash_elem hash_elem;
@@ -26,7 +14,8 @@ struct spt_entry {
     uint32_t read_bytes;
     uint32_t zero_bytes;
     bool writable;
-    bool referenced;
+    int swap_index;
+    bool is_swapped;
 };
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED);

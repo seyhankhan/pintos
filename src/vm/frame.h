@@ -2,31 +2,30 @@
 #define FRAME_H
 
 #include "lib/kernel/hash.h"
-
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/palloc.h"
 #include "vm/page.h"
+#include "devices/swap.h"
+
 
 struct frame {
-    void *frame_page_address;                     // address of the frame's page
-    struct hash_elem hash_elem;                   // hash entry for frame table
-    struct thread *thread;                        // thread that owns frame 
-    struct lock lock;                             // allows synchronisation of frame processes 
-    uint32_t *page_table_entry;                   // frame's page's page table entry
-    struct list_elem list_elem;                   // frame list's list elem
+    void *kpage;                                  // address of the frame's page
+    void *upage;                                  // User address that maps to  frame
+    struct list_elem list_elem;                   // List elem for page eviction algorithm
+    struct hash_elem hash_elem;                   // Hash entry for frame table
     bool is_pinned;                               // boolean check whether frame is pinned or not
-    struct list pages;
+    // struct list pages;
+    bool reference_bit;
 };
 
 
 bool less_compare_function(const struct hash_elem *first_hash_elem, const struct hash_elem *second_hash_elem, void *aux UNUSED);
 unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED);
 void initialise_frame(void);
-void *obtain_free_frame(enum palloc_flags flags);
+void *get_free_frame(enum palloc_flags flags);
 void free_frame_from_table(void* page);
-bool map_user_vp_to_frame(void *page, uint32_t *page_table_entry, void *frame_page_address); 
-struct frame *retrieve_page_from_frame(void *page_to_retrieve);
+struct frame *get_frame_from_table(void *page_to_retrieve);
 
 
 #endif
