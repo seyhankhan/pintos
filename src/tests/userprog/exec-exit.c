@@ -8,6 +8,6 @@ const char *test_name = "exec-exit";
 int
 main (void) 
 {
-  msg ("run")
+  msg ("run");
   exit (exec ("child-simple"));
 }

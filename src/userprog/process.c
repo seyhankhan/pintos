@@ -19,6 +19,8 @@
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
+#include "vm/frame.h"
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -57,7 +59,8 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   // Freed at the end of this function
-  fn_copy = palloc_get_page (0);
+  fn_copy = palloc_get_page (PAL_USER);
+
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
@@ -115,7 +118,8 @@ start_process (void *file_name_)
 
   /* Splits commandline arguments into an array of strings*/
   // If memory allocation failed exit
-  argv = palloc_get_page(0);
+  argv = palloc_get_page(PAL_USER);
+  
   if (argv == NULL) 
   {
     sema_up(&thread_current()->sema_execute);
@@ -192,6 +196,9 @@ process_wait (tid_t child_tid UNUSED)
   return exit_code;
 }
 
+static void free_spt_entry(struct hash_elem *e, void *aux UNUSED) {
+  free(hash_entry(e, struct spt_entry, hash_elem));
+}
 
 /* Free the current process's resources. */
 void
@@ -200,13 +207,21 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
+  
   dec_ref_count(cur->exit_status);
 
+  // Unmap all memory mapped files
+  struct list_elem *e;
+  while (!list_empty (&cur->memory_mapped_files)) {
+    e = list_begin(&cur->memory_mapped_files);
+    munmap(list_entry(e, struct memory_file, elem)->mapid);
+  }
   // Closes all opened files
   close_all_files();
   // Remove children and free the memory
   free_children();
+
+  hash_clear(&cur->spt, free_spt_entry);
 
 
   /* Destroy the current process's page directory and switch back
@@ -229,7 +244,7 @@ process_exit (void)
   if (cur->exec_file != NULL) {
     file_allow_write(cur->exec_file);
   }
-  
+  printf ("%s: exit(%d)\n", cur->name, cur->exit_status->exit_code);
   sema_up(&cur->exit_status->sema);
 }
 
@@ -505,56 +520,34 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
+  file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
+
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
-      /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      
-      if (kpage == NULL){
-        
-        /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-        
-      }
+      struct thread *t = thread_current();
+      struct spt_entry *pagedata = create_file_page(file, upage, ofs, read_bytes, zero_bytes, writable, false);
 
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
-        return false; 
+      if (pagedata == NULL)
+        return false;
+
+      struct spt_entry *overlap = spt_add_page(&t->spt, pagedata);
+      if (overlap != NULL)  {
+        overlap->writable = overlap->writable || writable;
+        overlap->read_bytes += read_bytes;
       }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
+      ofs += PGSIZE;
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
     }
   return true;
 }
+
+
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
@@ -571,10 +564,12 @@ setup_stack (void **esp)
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        //palloc_free_page (kpage);
+        free_frame_from_table(kpage);
     }
   return success;
 }
+
 
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
@@ -606,30 +601,12 @@ setup_user_stack(char **argv, int argc, struct intr_frame *if_) {
   /* Push Arguments to the stack frame - order doesn't matter for now 
      as they will be referenced by pointers*/
   void *ptr_arr[argc];
-  if (!push_strings(argv, argc, if_, ptr_arr)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!word_align(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_null_sentinel(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_arg_pointers(if_, argc, ptr_arr)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_argc(if_, argc)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }
-  if (!push_null_sentinel(if_)) {
-    sema_up(&thread_current()->sema_execute);
-    thread_exit();
-  }  
+  push_strings(argv, argc, if_, ptr_arr);
+  word_align(if_);
+  push_null_sentinel(if_);
+  push_arg_pointers(if_, argc, ptr_arr);
+  push_argc(if_, argc);
+  push_null_sentinel(if_);
   
 }
 
@@ -638,9 +615,6 @@ push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
   for (int i = argc - 1; i >= 0; i--) {
     size_t token_length = strlen (argv[i]) + NULL_BYTE_SIZE;
     if_->esp = (void *) (((char*) if_->esp) - token_length);
-    if (PHYS_BASE - if_->esp > PGSIZE) {
-      return false;
-    }
     strlcpy ((char*)if_->esp, argv[i], token_length);
     // Store the pointer of the argument that was just pushed on to the stack
     ptr_arr[i] = if_->esp;
@@ -651,10 +625,7 @@ push_strings(char **argv, int argc,  struct intr_frame *if_, void **ptr_arr) {
 /* Round stack pointer down to a multiple of 4 before pushing pointers
     for better performance (word-aligned access)*/
 static bool word_align(struct intr_frame *if_) {
-
   if_->esp -= (unsigned) if_->esp % 4;  
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-      return false;
   return true;
 }
 
@@ -662,8 +633,6 @@ static bool word_align(struct intr_frame *if_) {
 static bool push_null_sentinel(struct intr_frame *if_) {
   // decrement stack pointer by size of sentinel
   if_->esp = (((void**) if_->esp) - 1);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   *((void**)(if_->esp)) = NULL;
   return true;
 }
@@ -674,15 +643,11 @@ push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
   // Push pointers to arguments in reverse order
   for (int i = argc - 1; i >= 0; i--) {
     if_->esp = (((void**) if_->esp) - 1);
-    if (PHYS_BASE - if_->esp > PGSIZE) 
-      return false;
     memcpy(if_->esp, &ptr_arr[i], sizeof(ptr_arr[i]));
   }
   // Push address of argv[0]
   void *addr_argv = if_->esp;
   if_->esp = (((void**) if_->esp) - 1);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   memcpy(if_->esp, &addr_argv , sizeof(addr_argv));
   return true;
 }
@@ -690,8 +655,6 @@ push_arg_pointers(struct intr_frame *if_, int argc, void **ptr_arr) {
 /* Pushes argc to the stack*/
 static bool push_argc(struct intr_frame *if_, int argc) {
   if_->esp -= sizeof(argc);
-  if (PHYS_BASE - if_->esp > PGSIZE) 
-    return false;
   memcpy(if_->esp, &argc, sizeof(argc));
   return true;
 }
