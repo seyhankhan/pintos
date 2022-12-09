@@ -132,6 +132,7 @@ kill (struct intr_frame *f)
 
 static void
 page_fault (struct intr_frame *f) {
+   // printf("Page fault!\n");
 
    bool not_present;  /* True: not-present page, false: writing r/o page. */
    bool write;        /* True: access was write, false: access was read. */
@@ -160,7 +161,7 @@ page_fault (struct intr_frame *f) {
    user = (f->error_code & PF_U) != 0;
 
    struct spt_entry *fpage = spt_find_addr(pg_round_down(fault_addr));
-
+   
    /* Writing to a read only page*/
    if (fpage != NULL && write && !fpage->writable) {
       exit(-1);

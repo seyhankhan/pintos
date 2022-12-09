@@ -59,8 +59,7 @@ bool load_page_from_spt(struct spt_entry *entry) {
       // get_frame_from_table(kpage)->spte = entry; 
       if (kpage == NULL)
       {
-
-         // printf("Couldn't get frame\n");
+         printf("Couldn't get frame\n");
          // Ideally this won't be the case as we will evict frames to make space
          // lock_release(&spt_lock);
          return false;
@@ -73,10 +72,9 @@ bool load_page_from_spt(struct spt_entry *entry) {
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
          // lock_release(&spt_lock);
-         // printf("failed to set page\n");
+         printf("failed to set page\n");
          return false;
       }
-
    } else {
       //   Check if writable flag for the page should be updated
       if (entry->writable && !pagedir_is_writable(t->pagedir, entry->upage)) {
@@ -85,7 +83,7 @@ bool load_page_from_spt(struct spt_entry *entry) {
    }
    // printf("Entry zero bytes: %d\n", entry->zero_bytes);
    //  Load data into the page.
-   if (entry->zero_bytes == PGSIZE) {
+   if (entry->zero_bytes == PGSIZE && !entry->is_swapped) {
       // printf("Zero page\n");
       memset(kpage, 0, page_zero_bytes);
    } else {
@@ -107,7 +105,8 @@ bool load_page_from_spt(struct spt_entry *entry) {
       }
       memset(kpage + page_read_bytes, 0, page_zero_bytes);
    }
-   // printf("Added upage: %p\n",get_frame_from_table(kpage)->spte->upage);
+   // printf("Added upage: %p\n", entry->upage);
+   // printf("Added upage: %p\n",get_frame_from_table(kpage)->upage);
 
    // lock_release(&spt_lock);
 
@@ -174,5 +173,6 @@ struct spt_entry *create_zero_page(void *addr, bool writable)
    page->zero_bytes = PGSIZE;
    page->writable = writable;
    page->is_swapped = false;
+   page->is_mmap = false;
    return page;
 }

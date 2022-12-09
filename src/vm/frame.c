@@ -45,6 +45,7 @@ void initialise_frame() {
   lock_init(&lock_eviction);
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);
   list_init(&frames_for_eviction);
+  victim_elem = list_begin(&frames_for_eviction);
 }
 
 /* Removes frame from table and frees the struct and frees the kpage*/
@@ -69,6 +70,7 @@ void *get_free_frame(struct spt_entry entry) {
   struct frame *f = evict_frame();
   f->pagedir = thread_current()->pagedir;
   f->upage = entry.upage;
+  // printf("returned a frame with addr: %p\n", f->upage);
   return f->kpage;
   // return get_free_frame(flags);
   //PANIC("need to implement eviction");
@@ -135,7 +137,7 @@ static struct frame *evict_frame() {
   lock_release(&lock_on_frame);
   lock_release(&lock_eviction);
   // printf("Freeing frame from table: %p\n", frame_to_be_evicted->kpage);
-  struct spt_entry *entry = pagedir_get_page(frame_to_be_evicted->pagedir, frame_to_be_evicted->upage);
+  struct spt_entry *entry = spt_find_addr(frame_to_be_evicted->upage);
   /* If entry is read only - don't write to swap just evict - file can be read again*/
   /* If entry is mmap - write back to file - don't write to swap */
   /* If entry is zero page (zero-bytes = PGSIZE) - don't write to swap)*/
@@ -149,10 +151,12 @@ static struct frame *evict_frame() {
       file_write(entry->file, entry->upage, entry->read_bytes);
       filesys_lock_release();
     } else {
+      // printf("Swapping dirty page\n");
       entry->swap_index = swap_out(frame_to_be_evicted->kpage);
       entry->is_swapped = true;
     }
   }
+  // printf("Clearing page\n");
   pagedir_clear_page(frame_to_be_evicted->pagedir, entry->upage);
   return frame_to_be_evicted;
 }
@@ -161,6 +165,7 @@ static struct frame *evict_frame() {
 /* Eviction Functions*/
 
 static struct frame *get_next_frame_for_eviction() {
+  // printf("Evicting\n");
 	if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
   	victim_elem = list_begin(&frames_for_eviction);
   }
@@ -173,28 +178,25 @@ static struct frame *get_next_frame_for_eviction() {
       eviction_move_next();
       continue;
     }
-    // printf("Has page: %pd\n",pagedir_get_page(thread_current()->pagedir, victim_frame->));
-    void *upage = victim_frame->upage;
-    if (pagedir_is_accessed(victim_frame->pagedir, upage)) {
-      pagedir_set_accessed(victim_frame->pagedir, upage, false);
+    // printf("Upage: %pd\n",victim_frame->upage);
+    if (pagedir_is_accessed(victim_frame->pagedir, victim_frame->upage)) {
+      pagedir_set_accessed(victim_frame->pagedir, victim_frame->upage, false);
       eviction_move_next();
       continue;
     }
     found = true;
   }
+  // return victim_frame;
   return victim_frame;
 }
 
 /* move position of next in frames_for_eviction */
 static void eviction_move_next() {
-
+  victim_elem = list_next(victim_elem);
   if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
     // printf("Victim: %p\n", victim_elem);
     victim_elem = list_begin(&frames_for_eviction);
-  } else {
-    // printf("Next\n");
-    victim_elem = list_next(victim_elem);
-  }
+  } 
 }
 
 /* Algorithm
@@ -215,21 +217,6 @@ If a file is read-only (writable == false) then don't write to swap as it can be
 
 */
 
-
-//go through all pages sharing the frame, inspect accessed bit of each page
-//if all 0, evict this frame
-//otherwise, flip first bit to 1
-// static bool look_through_flip_if_necessary(struct frame *vf) {
-//   struct list_elem *e;
-//   for (e = list_begin(&vf->pages); e != list_end(&vf->pages); e = list_next(e)) {
-//     struct page *page = list_entry(e, struct page, frame_elem);
-//     if (pagedir_is_accessed(&page->pagedir, page->addr)) {
-//       pagedir_set_accessed(&page->pagedir, page->addr, false);
-//       return false;
-//     }
-//   }
-//   return true;
-// }
 
 
 
