@@ -111,7 +111,7 @@ void exit(int status) {
   struct thread *cur = thread_current();
   // Release lock, if held by thread about to exit
   if (lock_held_by_current_thread(&lock_filesys)) {
-    filesys_lock_release();
+    lock_release(&lock_filesys);
   }
   // Free mmap files in process exit or here
   cur->exit_status->exit_code = status;
@@ -161,12 +161,10 @@ static int open (const char *file) {
   }
   struct file *opened_file;
   struct file_wrapper *wrapped_file;
-  // printf("open\n");
-  filesys_lock_acquire();
   if (!is_vaddr((struct inode *) file)) {
-    filesys_lock_release();
     return -1;
   }
+  filesys_lock_acquire();
   opened_file = filesys_open(file);
   filesys_lock_release();
 
@@ -197,6 +195,7 @@ static bool remove (const char *file) {
   filesys_lock_acquire();
   struct file *f = filesys_open(file);
   if (f == NULL) {
+    filesys_lock_release();
     exit(-1);
   } else {
     file_close(f);
@@ -502,12 +501,18 @@ bool is_vaddr(const void *uaddr)
   return true;
 }
 
+
+/* Re-entrant locking and unlocking */
 void filesys_lock_acquire() {
   // printf("About to acquire filesys lock\n");
-  lock_acquire(&lock_filesys);
+  if (!lock_held_by_current_thread(&lock_filesys)) {
+    lock_acquire(&lock_filesys);
+  }
 }
 
 void filesys_lock_release() {
   // printf("About to release filesys lock\n");
-  lock_release(&lock_filesys);
+  if (lock_held_by_current_thread(&lock_filesys)) {
+    lock_release(&lock_filesys);
+  }
 }

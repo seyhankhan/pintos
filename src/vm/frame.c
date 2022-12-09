@@ -37,7 +37,9 @@ unsigned hashing_function(const struct hash_elem *hash_element, void *aux UNUSED
 /* Initialise frame table */
 void initialise_frame() {
   lock_init(&lock_on_frame);
+  lock_init(&lock_eviction);
   hash_init(&frame_table, hashing_function, less_compare_function, NULL);
+  list_init(&frames_for_eviction);
 }
 
 //add page to frame table
@@ -91,7 +93,7 @@ void *obtain_free_frame(enum palloc_flags flags) {
     insert_page_into_frame(free_page_to_obtain);
     retrieve_page_from_frame(free_page_to_obtain);
   } else {
-    #ifdef VM
+    #ifndef VM
     exit(-1);
     #endif
 
@@ -133,14 +135,10 @@ static void evict_frame() {
 static struct frame *get_next_frame_for_eviction() {
 	if (next == NULL || next == list_end(&frames_for_eviction)) {
   	next = list_begin(&frames_for_eviction);
-  }  
-  if (next != NULL) {
-    //get frame struct from frame list
-		struct frame *vf = list_entry(next, struct frame, list_elem);
-    return vf;
-  }  
-  //shouldn't reach here
-
+  }
+  //get frame struct from frame list
+  struct frame *vf = list_entry(next, struct frame, list_elem);
+  return vf;
 }
 
 
@@ -156,10 +154,8 @@ static void eviction_move_next() {
 //go through all pages sharing the frame, inspect accessed bit of each page
 //if all 0, evict this frame
 //otherwise, flip first bit to 1
-
 static bool look_through_flip_if_necessary(struct frame *vf) {
   struct list_elem *e;
-  
   for (e = list_begin(&vf->pages); e != list_end(&vf->pages); e = list_next(e)) {
     struct page *page = list_entry(e, struct page, frame_elem);
     if (pagedir_is_accessed(&page->pagedir, page->addr)) {
