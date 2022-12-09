@@ -132,7 +132,6 @@ kill (struct intr_frame *f)
 
 static void
 page_fault (struct intr_frame *f) {
-   // printf("Page fault!\n");
 
    bool not_present;  /* True: not-present page, false: writing r/o page. */
    bool write;        /* True: access was write, false: access was read. */
@@ -183,7 +182,6 @@ page_fault (struct intr_frame *f) {
 }
 
 static bool grow_stack(void *fault_addr) {
-   // printf("about to grow stack\n");
    struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
    spt_add_page(&thread_current()->spt, new_stack_page);
    load_page_from_spt(new_stack_page);

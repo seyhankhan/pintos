@@ -124,7 +124,6 @@ static pid_t exec (const char *file) {
   if (!is_vaddr(file)) {
     return pid;
   }
-  // printf("Exec\n");
   filesys_lock_acquire();
   pid = process_execute(file);
   filesys_lock_release();
@@ -176,7 +175,6 @@ static int open (const char *file) {
   if (wrapped_file == NULL) {
     return -1;
   }
-  // printf("open2\n");
   filesys_lock_acquire();
   wrapped_file->file = opened_file;
   wrapped_file->fd = get_next_fd();
@@ -188,10 +186,7 @@ static int open (const char *file) {
 
 
 static bool remove (const char *file) {
-  // check_fp_valid((char *) file);
-  
   // check if filename is empty, in which case can't remove
-  // printf("remove\n");
   filesys_lock_acquire();
   struct file *f = filesys_open(file);
   if (f == NULL) {
@@ -211,7 +206,6 @@ static int filesize (int fd ) {
   if (fw == NULL) {
     return -1;
   }
-  // printf("filesize\n");
   filesys_lock_acquire();
   int size = file_length(fw->file);
   filesys_lock_release();
@@ -246,7 +240,6 @@ static int read (int fd, void *buffer, unsigned length) {
     filesys_lock_release();
 
   }
-  // printf("returning with length %i\n", length_read);
   return length_read;
 }
 
@@ -256,7 +249,6 @@ static void seek (int fd , unsigned position ) {
   if (file == NULL) {
     exit(-1);
   }
-  // printf("seek\n");
   filesys_lock_acquire();
   file_seek(file->file, position);
   filesys_lock_release();
@@ -269,7 +261,6 @@ static unsigned tell (int fd ) {
   if (file == NULL) {
     exit(-1);
   }
-  // printf("tell\n");
   filesys_lock_acquire();
   pos = file_tell(file->file);
   filesys_lock_release();
@@ -412,7 +403,6 @@ void munmap (mapid_t mapid) {
       /* If it does exist then check if the page has been modified since its been added */
       if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
         /* If it has been modified then write the modified page back to the file*/
-        // printf("munmap\n");
         filesys_lock_acquire();
         file_seek(mfile->file, ofs);
         file_write(mfile->file, page->upage, page->read_bytes);
@@ -498,17 +488,14 @@ bool is_vaddr(const void *uaddr)
 
 /* Re-entrant locking and unlocking */
 void filesys_lock_acquire() {
-  // printf("About to acquire filesys lock\n");
   lock_acquire(&lock_filesys);
 }
 
 void filesys_lock_release() {
-  // printf("About to release filesys lock\n");
   lock_release(&lock_filesys);
 }
 
 bool try_filesys_lock_acquire() {
-  // printf("About to acquire filesys lock\n");
   if (!lock_held_by_current_thread(&lock_filesys)) {
     lock_acquire(&lock_filesys);
     return true;
@@ -517,7 +504,6 @@ bool try_filesys_lock_acquire() {
 }
 
 bool try_filesys_lock_release() {
-  // printf("About to release filesys lock\n");
   if (lock_held_by_current_thread(&lock_filesys)) {
     lock_release(&lock_filesys);
     return true;

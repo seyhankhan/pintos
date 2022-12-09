@@ -70,10 +70,7 @@ void *get_free_frame(struct spt_entry entry) {
   struct frame *f = evict_frame();
   f->pagedir = thread_current()->pagedir;
   f->upage = entry.upage;
-  // printf("returned a frame with addr: %p\n", f->upage);
   return f->kpage;
-  // return get_free_frame(flags);
-  //PANIC("need to implement eviction");
 }
 
 
@@ -121,22 +118,18 @@ static bool remove_frame_from_table(void *page_to_delete) {
 
 //clock second chance variant. circular linked list
 static struct frame *evict_frame() {
-  // printf("Evicting frame\n");
   struct frame *frame_to_be_evicted = NULL;
   
   lock_acquire(&lock_on_frame);
   lock_acquire(&lock_eviction);
 
   if (frame_to_be_evicted == NULL) {
-    // printf("Frame to be evicted is NULL\n");
 		struct frame *frame = get_next_frame_for_eviction();
     ASSERT (frame != NULL);
     frame_to_be_evicted = frame;
-    // printf("Found a frame\n");
   }
   lock_release(&lock_on_frame);
   lock_release(&lock_eviction);
-  // printf("Freeing frame from table: %p\n", frame_to_be_evicted->kpage);
   struct spt_entry *entry = spt_find_addr(frame_to_be_evicted->upage);
   /* If entry is read only - don't write to swap just evict - file can be read again*/
   /* If entry is mmap - write back to file - don't write to swap */
@@ -145,18 +138,15 @@ static struct frame *evict_frame() {
   if (pagedir_is_dirty(frame_to_be_evicted->pagedir, entry->upage)){
     if (entry->is_mmap) {
       /* If it has been modified then write the modified page back to the file*/
-      // printf("munmap\n");
       filesys_lock_acquire();
       file_seek(entry->file, entry->ofs);
       file_write(entry->file, entry->upage, entry->read_bytes);
       filesys_lock_release();
     } else {
-      // printf("Swapping dirty page\n");
       entry->swap_index = swap_out(frame_to_be_evicted->kpage);
       entry->is_swapped = true;
     }
   }
-  // printf("Clearing page\n");
   pagedir_clear_page(frame_to_be_evicted->pagedir, entry->upage);
   return frame_to_be_evicted;
 }
@@ -165,7 +155,6 @@ static struct frame *evict_frame() {
 /* Eviction Functions*/
 
 static struct frame *get_next_frame_for_eviction() {
-  // printf("Evicting\n");
 	if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
   	victim_elem = list_begin(&frames_for_eviction);
   }
@@ -178,7 +167,6 @@ static struct frame *get_next_frame_for_eviction() {
       eviction_move_next();
       continue;
     }
-    // printf("Upage: %pd\n",victim_frame->upage);
     if (pagedir_is_accessed(victim_frame->pagedir, victim_frame->upage)) {
       pagedir_set_accessed(victim_frame->pagedir, victim_frame->upage, false);
       eviction_move_next();
@@ -194,7 +182,6 @@ static struct frame *get_next_frame_for_eviction() {
 static void eviction_move_next() {
   victim_elem = list_next(victim_elem);
   if (victim_elem == NULL || victim_elem == list_end(&frames_for_eviction)) {
-    // printf("Victim: %p\n", victim_elem);
     victim_elem = list_begin(&frames_for_eviction);
   } 
 }

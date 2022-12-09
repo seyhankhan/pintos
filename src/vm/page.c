@@ -12,11 +12,7 @@
 #include "devices/swap.h"
 #include "stdio.h"
 
-static struct lock spt_lock;
 
-void init_page_lock() {
-   lock_init(&spt_lock);
-}
 
 unsigned hash_func(const struct hash_elem *e, void *aux UNUSED) {
    struct spt_entry *spte = hash_entry(e, struct spt_entry, hash_elem);
@@ -28,11 +24,9 @@ bool hash_less(const struct hash_elem *a, const struct hash_elem *b, void *aux U
 }
 
 struct spt_entry *spt_find_addr(const void *addr) {
-   // lock_acquire(&spt_lock);
    struct spt_entry entry;
    entry.upage = (void *)addr;
    struct hash_elem *elem = hash_find(&thread_current()->spt, &entry.hash_elem);
-   // lock_release(&spt_lock);
    if (elem != NULL) {
       return hash_entry(elem, struct spt_entry, hash_elem);
    }
@@ -44,8 +38,6 @@ bool load_page_from_spt(struct spt_entry *entry) {
 
    ASSERT(pg_ofs (entry->upage) == 0);
    ASSERT(entry->ofs % PGSIZE == 0);
-   // lock_acquire(&spt_lock);
-   // printf("Loading upage: %p\n", entry->upage);
    size_t page_read_bytes = entry->read_bytes < PGSIZE ? entry->read_bytes : PGSIZE;
    size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
@@ -53,15 +45,11 @@ bool load_page_from_spt(struct spt_entry *entry) {
    struct thread *t = thread_current ();
    uint8_t *kpage = pagedir_get_page (t->pagedir, entry->upage);
    if (kpage == NULL){
-      // printf("kpage is null\n");
       // Get a new page of memory.
       kpage = get_free_frame(*entry);
-      // get_frame_from_table(kpage)->spte = entry; 
       if (kpage == NULL)
       {
-         printf("Couldn't get frame\n");
          // Ideally this won't be the case as we will evict frames to make space
-         // lock_release(&spt_lock);
          return false;
       }
       /* If entry is swapped and (mmap or read only) then read back from file*/
@@ -71,8 +59,6 @@ bool load_page_from_spt(struct spt_entry *entry) {
 
       if (!pagedir_set_page(t->pagedir, entry->upage, kpage, entry->writable)) {
          free_frame_from_table(kpage);
-         // lock_release(&spt_lock);
-         printf("failed to set page\n");
          return false;
       }
    } else {
@@ -81,10 +67,8 @@ bool load_page_from_spt(struct spt_entry *entry) {
          pagedir_set_writable(t->pagedir, entry->upage, entry->writable);
       }
    }
-   // printf("Entry zero bytes: %d\n", entry->zero_bytes);
    //  Load data into the page.
    if (entry->zero_bytes == PGSIZE && !entry->is_swapped) {
-      // printf("Zero page\n");
       memset(kpage, 0, page_zero_bytes);
    } else {
       if (entry->is_swapped) {
@@ -105,18 +89,11 @@ bool load_page_from_spt(struct spt_entry *entry) {
       }
       memset(kpage + page_read_bytes, 0, page_zero_bytes);
    }
-   // printf("Added upage: %p\n", entry->upage);
-   // printf("Added upage: %p\n",get_frame_from_table(kpage)->upage);
-
-   // lock_release(&spt_lock);
-
    return true;
 }
 
 struct spt_entry *spt_add_page(struct hash *spt, struct spt_entry *entry) {  
-   // lock_acquire(&spt_lock);
    struct hash_elem *old = hash_insert(spt, &entry->hash_elem);
-   // lock_release(&spt_lock);
    if (old != NULL)
    {
       return hash_entry(old, struct spt_entry, hash_elem);
@@ -129,9 +106,7 @@ bool spt_delete_page(struct hash *spt, void *page)
    struct spt_entry *e = spt_find_addr(page);
    if (!e)
       return false;
-   // lock_acquire(&spt_lock);
    struct hash_elem *he = hash_delete(spt, &e->hash_elem);
-   // // lock_release(&spt_lock);
    if (!he)
    {
       return false;
