@@ -105,3 +105,5 @@ make build/tests/filesys/base/sm-random.result
 make build/tests/filesys/base/sm-seq-block.result
 make build/tests/filesys/base/sm-seq-random.result
 make build/tests/filesys/base/syn-remove.result
+make build/tests/filesys/base/syn-read.result
+make build/tests/filesys/base/syn-write.result
