@@ -124,10 +124,10 @@ static pid_t exec (const char *file) {
   if (!is_vaddr(file)) {
     return pid;
   }
-
-  lock_acquire(&lock_filesys);
+  // printf("Exec\n");
+  filesys_lock_acquire();
   pid = process_execute(file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
   return pid;
 }
 
@@ -141,9 +141,10 @@ static bool create (const char *file, unsigned initial_size) {
   }
   // Currently passess all tests for create but needs to be checked
   //all checks complete. create file
-  lock_acquire(&lock_filesys);
+  // printf("create\n");
+  filesys_lock_acquire();
   bool success = filesys_create(file, initial_size);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
   return success;
 }
 
@@ -160,13 +161,12 @@ static int open (const char *file) {
   }
   struct file *opened_file;
   struct file_wrapper *wrapped_file;
-
-  lock_acquire(&lock_filesys);
   if (!is_vaddr((struct inode *) file)) {
     return -1;
   }
+  filesys_lock_acquire();
   opened_file = filesys_open(file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
 
   if (opened_file == NULL) {
     return -1;
@@ -176,11 +176,12 @@ static int open (const char *file) {
   if (wrapped_file == NULL) {
     return -1;
   }
-  lock_acquire(&lock_filesys);
+  // printf("open2\n");
+  filesys_lock_acquire();
   wrapped_file->file = opened_file;
   wrapped_file->fd = get_next_fd();
   list_push_back(&thread_current()->opened_files, &wrapped_file->file_elem);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
 
   return wrapped_file->fd;  
 }
@@ -190,15 +191,17 @@ static bool remove (const char *file) {
   // check_fp_valid((char *) file);
   
   // check if filename is empty, in which case can't remove
-  lock_acquire(&lock_filesys);
+  // printf("remove\n");
+  filesys_lock_acquire();
   struct file *f = filesys_open(file);
   if (f == NULL) {
+    filesys_lock_release();
     exit(-1);
   } else {
     file_close(f);
   }
   bool deleted_file = filesys_remove(file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
   return deleted_file;
 }
 
@@ -208,9 +211,10 @@ static int filesize (int fd ) {
   if (fw == NULL) {
     return -1;
   }
-  lock_acquire(&lock_filesys);
+  // printf("filesize\n");
+  filesys_lock_acquire();
   int size = file_length(fw->file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
   return size;
 }
 
@@ -231,13 +235,16 @@ static int read (int fd, void *buffer, unsigned length) {
     return length;
     }
   } else {
+    filesys_lock_acquire();
     struct file_wrapper *f = get_file_by_fd(fd);
+    filesys_lock_release();
     if (f == NULL) {
       return -1;
     }
-    lock_acquire(&lock_filesys);
+    filesys_lock_acquire();
     length_read = file_read(f->file, buffer, length);
-    lock_release(&lock_filesys);
+    filesys_lock_release();
+
   }
   // printf("returning with length %i\n", length_read);
   return length_read;
@@ -249,9 +256,10 @@ static void seek (int fd , unsigned position ) {
   if (file == NULL) {
     exit(-1);
   }
-  lock_acquire(&lock_filesys);
+  // printf("seek\n");
+  filesys_lock_acquire();
   file_seek(file->file, position);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
 }
 
 static unsigned tell (int fd ) {
@@ -261,9 +269,10 @@ static unsigned tell (int fd ) {
   if (file == NULL) {
     exit(-1);
   }
-  lock_acquire(&lock_filesys);
+  // printf("tell\n");
+  filesys_lock_acquire();
   pos = file_tell(file->file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
   return pos;
 }
 
@@ -273,11 +282,12 @@ static void close (int fd ) {
   if (file == NULL) {
     exit(-1);
   }
-  lock_acquire(&lock_filesys);
+  // printf("close\n");
+  filesys_lock_acquire();
   list_remove(&file->file_elem);
   file_close(file->file);
   free(file);
-  lock_release(&lock_filesys);
+  filesys_lock_release();
 }
 
 static int write (int fd, const void *buffer, unsigned length) {
@@ -297,9 +307,10 @@ static int write (int fd, const void *buffer, unsigned length) {
     if (f == NULL) {
       return -1;
     }
-    lock_acquire(&lock_filesys);
+    // printf("write\n");
+    filesys_lock_acquire(); 
     length_write = file_write(f->file, buffer, length);
-    lock_release(&lock_filesys);
+    filesys_lock_release();
   }
   return length_write;
 }
@@ -308,9 +319,11 @@ static int write (int fd, const void *buffer, unsigned length) {
 /*Maps the file open as fd into the process’s virtual address space. 
   The entire file is mapped into consecutive virtual pages starting at addr. */
 mapid_t mmap(int fd, void* addr) {
+  // printf("mmap\n");
+  filesys_lock_acquire();
   struct file* file = file_reopen(get_file_by_fd(fd)->file);
   size_t file_size = file_length(file);
-
+  filesys_lock_release();
   /* If file is not opened/not valid and filesize <= 0 then return -1*/ 
   if (file == NULL || file_size <= 0) {
     return -1;
@@ -363,14 +376,8 @@ mapid_t mmap(int fd, void* addr) {
       return -1;
     }
 
-    /* Obtain a free frame*/
-    kpage = obtain_free_frame(PAL_USER);
-    if (kpage == NULL){
-      return -1;
-    }
-
     /* Create a file SPT entry */
-    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable);
+    struct spt_entry *spt_page = create_file_page(file, temp, ofs, read_bytes, zero_bytes, writable, true);
     if (spt_page == NULL)
       return -1;
     /* Add it to the SPT */
@@ -405,8 +412,11 @@ void munmap (mapid_t mapid) {
       /* If it does exist then check if the page has been modified since its been added */
       if(pagedir_is_dirty(thread_current()->pagedir, addr)) {
         /* If it has been modified then write the modified page back to the file*/
+        // printf("munmap\n");
+        filesys_lock_acquire();
         file_seek(mfile->file, ofs);
         file_write(mfile->file, page->upage, page->read_bytes);
+        filesys_lock_release();
       }
       /* Check if the page has actually been loaded into memory*/
       void *kpage = pagedir_get_page(thread_current()->pagedir, addr);
@@ -483,4 +493,34 @@ bool is_vaddr(const void *uaddr)
     return true;
   }
   return true;
+}
+
+
+/* Re-entrant locking and unlocking */
+void filesys_lock_acquire() {
+  // printf("About to acquire filesys lock\n");
+  lock_acquire(&lock_filesys);
+}
+
+void filesys_lock_release() {
+  // printf("About to release filesys lock\n");
+  lock_release(&lock_filesys);
+}
+
+bool try_filesys_lock_acquire() {
+  // printf("About to acquire filesys lock\n");
+  if (!lock_held_by_current_thread(&lock_filesys)) {
+    lock_acquire(&lock_filesys);
+    return true;
+  }
+  return false;
+}
+
+bool try_filesys_lock_release() {
+  // printf("About to release filesys lock\n");
+  if (lock_held_by_current_thread(&lock_filesys)) {
+    lock_release(&lock_filesys);
+    return true;
+  }
+  return false;
 }

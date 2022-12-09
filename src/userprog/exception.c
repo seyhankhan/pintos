@@ -182,19 +182,10 @@ page_fault (struct intr_frame *f) {
 }
 
 static bool grow_stack(void *fault_addr) {
+   // printf("about to grow stack\n");
    struct spt_entry *new_stack_page = create_zero_page(pg_round_down(fault_addr), true);
    spt_add_page(&thread_current()->spt, new_stack_page);
-   uint8_t *kpage = obtain_free_frame(PAL_USER);
-   if (kpage == NULL){
-      // Ideally this won't be the case as we will evict frames to make space
-      return false;
-   }
-   memset (kpage, 0, PGSIZE);
-   // Add the page to the process's address space. 
-   if (!pagedir_set_page(thread_current()->pagedir, new_stack_page->upage, kpage, new_stack_page->writable)) {
-      free_frame_from_table(kpage);
-      return false;
-   }
+   load_page_from_spt(new_stack_page);
    return true;
 }
 

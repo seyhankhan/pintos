@@ -1,0 +1,7 @@
+cat build/tests/vm/pt-overflowstk.output
+cat build/tests/vm/page-linear.output
+cat build/tests/vm/page-parallel.output
+cat build/tests/vm/page-merge-seq.output
+cat build/tests/vm/page-merge-stk.output
+cat build/tests/vm/page-merge-mm.output
+cat build/tests/vm/page-merge-par.output
